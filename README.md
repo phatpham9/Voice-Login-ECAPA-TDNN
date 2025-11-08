@@ -1,12 +1,12 @@
 ---
-title: Voice Login ECAPA TDNN
-emoji: 🔐
+title: Voice Login ECAPA-TDNN
+emoji: 📚
 colorFrom: gray
 colorTo: purple
 sdk: gradio
 sdk_version: 5.49.1
 app_file: app.py
-pinned: false
+pinned: true
 license: mit
 short_description: Voice Login — ECAPA-TDNN (SpeechBrain)
 ---
