@@ -125,7 +125,7 @@ with gr.Blocks() as demo:
     gr.Markdown("# 🔐 Voice Login — ECAPA-TDNN (SpeechBrain)")
 
     with gr.Tab("Enroll"):
-        u = gr.Textbox(label="Username", placeholder="e.g: phatpham")
+        u = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
         a = gr.Audio(
             sources=["microphone", "upload"],
             type="numpy",
@@ -135,7 +135,7 @@ with gr.Blocks() as demo:
         gr.Button("Enroll").click(enroll, inputs=[u, a], outputs=[out])
 
     with gr.Tab("Login"):
-        u2 = gr.Textbox(label="Username")
+        u2 = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
         a2 = gr.Audio(
             sources=["microphone", "upload"],
             type="numpy",
