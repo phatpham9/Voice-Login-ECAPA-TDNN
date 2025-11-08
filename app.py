@@ -55,34 +55,6 @@ def cosine_similarity(a, b):
 DEFAULT_THRESHOLD = 0.85
 
 
-def enroll(username, audio):
-    if not username:
-        return "⚠️ Please enter a username.", None
-    if audio is None:
-        return "⚠️ Please record your voice.", None
-
-    # Handle both filepath (string) and tuple (sr, wav_np) formats
-    if isinstance(audio, str):
-        print(f"Audio received as filepath: {audio}")
-        waveform, sr = torchaudio.load(audio)
-        wav_np = waveform.numpy()
-        if wav_np.ndim > 1:
-            wav_np = wav_np[0]  # Take first channel if stereo
-        audio_tuple = (sr, wav_np)
-    else:
-        sr, wav_np = audio
-        audio_tuple = audio
-
-    print(
-        f"Audio info: sr={sr}, shape={wav_np.shape}, max={wav_np.max()}, min={wav_np.min()}"
-    )
-
-    emb = extract_embedding(audio_tuple)
-    save_embedding(username, emb)
-
-    return f"✅ Enrolled '{username}' — embedding {emb.shape[0]}D"
-
-
 def login(username, audio, threshold):
     if not username:
         return "⚠️ Please enter a username.", None
@@ -118,21 +90,39 @@ def login(username, audio, threshold):
         return f"❌ DENIED — score={score:.3f} < threshold={threshold:.2f}"
 
 
+def enroll(username, audio):
+    if not username:
+        return "⚠️ Please enter a username.", None
+    if audio is None:
+        return "⚠️ Please record your voice.", None
+
+    # Handle both filepath (string) and tuple (sr, wav_np) formats
+    if isinstance(audio, str):
+        print(f"Audio received as filepath: {audio}")
+        waveform, sr = torchaudio.load(audio)
+        wav_np = waveform.numpy()
+        if wav_np.ndim > 1:
+            wav_np = wav_np[0]  # Take first channel if stereo
+        audio_tuple = (sr, wav_np)
+    else:
+        sr, wav_np = audio
+        audio_tuple = audio
+
+    print(
+        f"Audio info: sr={sr}, shape={wav_np.shape}, max={wav_np.max()}, min={wav_np.min()}"
+    )
+
+    emb = extract_embedding(audio_tuple)
+    save_embedding(username, emb)
+
+    return f"✅ Enrolled '{username}' — embedding {emb.shape[0]}D"
+
+
 # ------------------------------------
 # Gradio UI
 # ------------------------------------
 with gr.Blocks() as demo:
     gr.Markdown("# 🔐 Voice Login — ECAPA-TDNN (SpeechBrain)")
-
-    with gr.Tab("Enroll"):
-        u = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
-        a = gr.Audio(
-            sources=["microphone", "upload"],
-            type="numpy",
-            label="Record ~5s",
-        )
-        out = gr.Textbox(label="Result")
-        gr.Button("Enroll").click(enroll, inputs=[u, a], outputs=[out])
 
     with gr.Tab("Login"):
         u2 = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
@@ -146,6 +136,16 @@ with gr.Blocks() as demo:
         )
         out2 = gr.Textbox(label="Result")
         gr.Button("Login").click(login, inputs=[u2, a2, th], outputs=[out2])
+
+    with gr.Tab("Enroll"):
+        u = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
+        a = gr.Audio(
+            sources=["microphone", "upload"],
+            type="numpy",
+            label="Record ~5s",
+        )
+        out = gr.Textbox(label="Result")
+        gr.Button("Enroll").click(enroll, inputs=[u, a], outputs=[out])
 
 
 if __name__ == "__main__":
