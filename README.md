@@ -40,17 +40,35 @@ The system uses ECAPA-TDNN to extract 192-dimensional speaker embeddings from vo
 git clone phatpham9/Voice-Login-ECAPA-TDN
 cd Voice-Login-ECAPA-TDNN
 
-# Install dependencies
+# Install dependencies with uv (recommended)
+uv venv
+uv pip install -r requirements.txt
+
+# Or with pip
 pip install -r requirements.txt
 ```
 
 ### Run the Application
 
+#### Production Mode
 ```bash
+# With uv
+uv run app.py
+
+# Or with python
 python app.py
 ```
 
-The application will launch a Gradio interface in your browser.
+#### Development Mode (with auto-reload)
+```bash
+# With uv (recommended)
+uv run gradio app.py
+
+# Or with gradio CLI
+gradio app.py
+```
+
+The application will launch a Gradio interface in your browser. In development mode, the server will automatically reload when you make changes to the code.
 
 ## 📋 Requirements
 

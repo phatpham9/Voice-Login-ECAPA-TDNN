@@ -2,8 +2,7 @@ import torch
 import torchaudio
 import numpy as np
 import gradio as gr
-from speechbrain.pretrained import EncoderClassifier
-
+from speechbrain.inference.speaker import EncoderClassifier
 from db import save_embedding, load_embedding
 
 
@@ -13,7 +12,7 @@ from db import save_embedding, load_embedding
 model = EncoderClassifier.from_hparams(
     source="speechbrain/spkrec-ecapa-voxceleb",
     savedir="ecapa",
-    run_opts={"device": "cpu"},  # Mac M1 có thể đổi thành "mps" nếu torch hỗ trợ
+    run_opts={"device": "cpu"},
 )
 
 
@@ -42,6 +41,7 @@ def extract_embedding(audio_tuple) -> np.ndarray:
 
 
 def cosine_similarity(a, b):
+    """Compute cosine similarity between two vectors"""
     a = a.flatten()
     b = b.flatten()
     a = a / (np.linalg.norm(a) + 1e-9)
@@ -57,9 +57,9 @@ DEFAULT_THRESHOLD = 0.85
 
 def enroll(username, audio):
     if not username:
-        return "⚠️ Vui lòng nhập username.", None
+        return "⚠️ Please enter a username.", None
     if audio is None:
-        return "⚠️ Vui lòng ghi âm giọng nói.", None
+        return "⚠️ Please record your voice.", None
 
     # Handle both filepath (string) and tuple (sr, wav_np) formats
     if isinstance(audio, str):
@@ -80,22 +80,14 @@ def enroll(username, audio):
     emb = extract_embedding(audio_tuple)
     save_embedding(username, emb)
 
-    # Normalize audio for playback (ensure it's in [-1, 1] range)
-    wav_normalized = wav_np.copy()
-    max_val = np.abs(wav_normalized).max()
-    if max_val > 0:
-        wav_normalized = wav_normalized / max_val
-
-    playback_audio = (sr, wav_normalized)
-
-    return f"✅ Enrolled '{username}' — embedding {emb.shape[0]}D", playback_audio
+    return f"✅ Enrolled '{username}' — embedding {emb.shape[0]}D"
 
 
 def login(username, audio, threshold):
     if not username:
-        return "⚠️ Vui lòng nhập username.", None
+        return "⚠️ Please enter a username.", None
     if audio is None:
-        return "⚠️ Vui lòng ghi âm giọng nói.", None
+        return "⚠️ Please record your voice.", None
 
     # Handle both filepath (string) and tuple (sr, wav_np) formats
     if isinstance(audio, str):
@@ -115,57 +107,32 @@ def login(username, audio, threshold):
 
     stored = load_embedding(username)
     if stored is None:
-        # Normalize audio for playback
-        wav_normalized = wav_np.copy()
-        max_val = np.abs(wav_normalized).max()
-        if max_val > 0:
-            wav_normalized = wav_normalized / max_val
-        return f"❌ Không tìm thấy user '{username}'. Hãy Enroll trước.", (
-            sr,
-            wav_normalized,
-        )
+        return f"❌ User '{username}' not found. Please enroll first."
 
     new_emb = extract_embedding(audio_tuple)
     score = cosine_similarity(stored, new_emb)
 
-    # Normalize audio for playback
-    wav_normalized = wav_np.copy()
-    max_val = np.abs(wav_normalized).max()
-    if max_val > 0:
-        wav_normalized = wav_normalized / max_val
-
-    playback_audio = (sr, wav_normalized)
-
     if score >= threshold:
-        return (
-            f"✅ SUCCESS — score={score:.3f} ≥ threshold={threshold:.2f}",
-            playback_audio,
-        )
+        return f"✅ SUCCESS — score={score:.3f} ≥ threshold={threshold:.2f}"
     else:
-        return (
-            f"❌ DENIED — score={score:.3f} < threshold={threshold:.2f}",
-            playback_audio,
-        )
+        return f"❌ DENIED — score={score:.3f} < threshold={threshold:.2f}"
 
 
 # ------------------------------------
 # Gradio UI
 # ------------------------------------
-with gr.Blocks() as app:
-    gr.Markdown(
-        "# 🔐 Voice Login — ECAPA-TDNN (SpeechBrain)\nText-independent • Tiếng Việt OK • No fine-tune"
-    )
+with gr.Blocks() as demo:
+    gr.Markdown("# 🔐 Voice Login — ECAPA-TDNN (SpeechBrain)")
 
     with gr.Tab("Enroll"):
-        u = gr.Textbox(label="Username", placeholder="vd: phatpham")
+        u = gr.Textbox(label="Username", placeholder="e.g: phatpham")
         a = gr.Audio(
             sources=["microphone", "upload"],
             type="numpy",
             label="Record ~5s",
         )
         out = gr.Textbox(label="Result")
-        playback = gr.Audio(label="Playback - Listen to your recording")
-        gr.Button("Enroll").click(enroll, inputs=[u, a], outputs=[out, playback])
+        gr.Button("Enroll").click(enroll, inputs=[u, a], outputs=[out])
 
     with gr.Tab("Login"):
         u2 = gr.Textbox(label="Username")
@@ -178,8 +145,8 @@ with gr.Blocks() as app:
             0.50, 0.98, value=DEFAULT_THRESHOLD, step=0.01, label="Threshold (cosine)"
         )
         out2 = gr.Textbox(label="Result")
-        playback2 = gr.Audio(label="Playback - Listen to your recording")
-        gr.Button("Login").click(login, inputs=[u2, a2, th], outputs=[out2, playback2])
+        gr.Button("Login").click(login, inputs=[u2, a2, th], outputs=[out2])
 
 
-app.launch()
+if __name__ == "__main__":
+    demo.launch()
