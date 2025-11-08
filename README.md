@@ -17,6 +17,7 @@ A text-independent speaker verification system using ECAPA-TDNN (Emphasized Chan
 
 ## ✨ Features
 
+### Core Functionality
 - **Text-Independent**: Works with any spoken content, no specific phrases required
 - **Multi-language Support**: Works with Vietnamese, English, and other languages
 - **Pre-trained Model**: Uses SpeechBrain's pre-trained ECAPA-TDNN on VoxCeleb dataset
@@ -27,6 +28,24 @@ A text-independent speaker verification system using ECAPA-TDNN (Emphasized Chan
 - **Best Match Verification**: Compares against all enrolled samples and uses the highest score
 - **Smart Audio Normalization**: Automatically handles audio length (3-15 seconds)
 - **Audio Quality Warnings**: Provides feedback when recordings are too short for optimal accuracy
+
+### Performance Metrics Dashboard
+- **FAR/FRR Analysis**: Calculate False Acceptance and False Rejection Rates
+- **EER Calculation**: Find optimal threshold (Equal Error Rate) using interpolation
+- **ROC Curve**: Receiver Operating Characteristic with AUC score
+- **DET Curve**: Detection Error Tradeoff with log-scale visualization
+- **Score Distribution**: Genuine vs impostor score histograms
+- **Confusion Matrix**: TP/TN/FP/FN breakdown with heatmap
+- **Interactive Threshold Analysis**: Real-time metric updates as you adjust threshold
+- **Smart Recommendations**: Actionable suggestions based on your data
+- **Comprehensive Documentation**: User guide with examples and troubleshooting
+
+### Data Management
+- **SQLite Database**: Professional database with ACID properties
+- **Audit Trail**: Complete authentication history logging
+- **User Management**: View, delete, and manage enrolled users
+- **Statistics Dashboard**: System-wide statistics and recent activity
+- **Data Migration**: Automatic migration from old JSON format
 
 ## 🎯 How It Works
 
@@ -83,6 +102,9 @@ The application will launch a Gradio interface in your browser. In development m
 - SpeechBrain
 - NumPy
 - SoundFile
+- Librosa
+- Plotly 5.0+ (for metrics dashboard)
+- SciPy 1.9+ (for EER calculation)
 
 See `requirements.txt` for full dependencies.
 
@@ -120,6 +142,39 @@ See `requirements.txt` for full dependencies.
 - Shows which enrolled sample matched best
 - Displays similarity score and threshold
 
+### Performance Metrics Dashboard
+
+Navigate to the **Performance Metrics** tab to analyze system performance scientifically:
+
+**Key Metrics:**
+- **FAR (False Acceptance Rate)**: Percentage of impostors incorrectly accepted
+- **FRR (False Rejection Rate)**: Percentage of genuine users incorrectly rejected  
+- **EER (Equal Error Rate)**: Optimal threshold where FAR = FRR
+- **AUC**: Area Under ROC Curve (overall system quality)
+
+**Visualizations:**
+- 📈 **ROC Curve**: True Positive Rate vs False Positive Rate
+- 📊 **DET Curve**: Detection Error Tradeoff (log-scale)
+- 📉 **FAR/FRR vs Threshold**: Find optimal operating point
+- 📊 **Score Distribution**: Genuine vs impostor score histograms
+- 🎯 **Confusion Matrix**: Classification results breakdown
+
+**How to Use:**
+1. Enroll 3-5 users with 2-3 voice samples each
+2. Perform successful and failed authentication attempts (at least 20+ total)
+3. Navigate to "Performance Metrics" tab
+4. Adjust threshold slider to see real-time metric changes
+5. Use recommendations to optimize your threshold setting
+
+**Requirements for Meaningful Metrics:**
+- Minimum: 10 genuine + 10 impostor attempts
+- Recommended: 20+ genuine + 20+ impostor attempts
+
+**Documentation:**
+- See `PERFORMANCE_METRICS_GUIDE.md` for comprehensive user guide
+- See `PERFORMANCE_METRICS_README.md` for quick start
+- Run `uv run demo_metrics.py` to test with sample data
+
 ### Threshold Adjustment
 
 - **Higher threshold (0.85-0.98)**: More secure but may reject legitimate users
@@ -147,11 +202,17 @@ The system provides helpful feedback on why verification failed.
 
 ```
 Voice-Login-ECAPA-TDNN/
-├── app.py              # Main Gradio application
-├── db.py               # Simple JSON-based database for embeddings
-├── requirements.txt    # Python dependencies
-├── voice_db.json       # User embeddings storage (created at runtime)
-└── ecapa/              # Pre-trained ECAPA-TDNN model files
+├── app.py                        # Main Gradio application with UI tabs
+├── database.py                   # SQLite database for embeddings & logs
+├── performance_metrics.py        # Performance analysis & visualization (NEW!)
+├── test_metrics.py               # Unit tests for metrics module
+├── demo_metrics.py               # Demo script with sample data
+├── requirements.txt              # Python dependencies
+├── voice_auth.db                 # SQLite database (created at runtime)
+├── PERFORMANCE_METRICS_GUIDE.md  # Comprehensive metrics documentation
+├── PERFORMANCE_METRICS_README.md # Quick start guide for metrics
+├── IMPLEMENTATION_SUMMARY.md     # Implementation details
+└── ecapa/                        # Pre-trained ECAPA-TDNN model files
     ├── classifier.ckpt
     ├── embedding_model.ckpt
     ├── hyperparams.yaml

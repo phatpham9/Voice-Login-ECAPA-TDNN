@@ -8,3 +8,5 @@ librosa
 requests
 huggingface-hub<1.0.0
 typer
+plotly>=5.0.0
+scipy>=1.9.0
