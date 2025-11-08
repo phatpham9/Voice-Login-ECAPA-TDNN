@@ -5,7 +5,16 @@ import numpy as np
 import gradio as gr
 import warnings
 from speechbrain.inference.speaker import EncoderClassifier
-from db import save_multiple_embeddings, load_embedding, list_users
+from database import (
+    save_multiple_embeddings,
+    load_embedding,
+    list_users,
+    log_authentication,
+    get_user_info,
+    delete_user,
+    get_database_stats,
+    get_auth_history,
+)
 
 # Suppress PySoundFile and librosa warnings for cleaner output
 warnings.filterwarnings("ignore", category=UserWarning, module="librosa")
@@ -150,10 +159,15 @@ def login(username, audio, threshold):
         print(f"Similarity to stored sample {i+1}: {score:.4f}")
 
     best_score = max(scores)
+    matched_sample = scores.index(best_score) + 1
     print(f"Best score: {best_score:.4f}, Threshold: {threshold:.2f}")
 
-    if best_score >= threshold:
-        return f"✅ SUCCESS — score={best_score:.3f} ≥ threshold={threshold:.2f} (matched sample {scores.index(best_score)+1}/{len(scores)}){warning_msg}"
+    # Log authentication attempt
+    success = best_score >= threshold
+    log_authentication(username, success, best_score, threshold, matched_sample)
+
+    if success:
+        return f"✅ SUCCESS — score={best_score:.3f} ≥ threshold={threshold:.2f} (matched sample {matched_sample}/{len(scores)}){warning_msg}"
     else:
         return f"❌ DENIED — score={best_score:.3f} < threshold={threshold:.2f}{warning_msg}"
 
@@ -173,6 +187,7 @@ def enroll(username, audio1, audio2, audio3):
 
     # Extract embeddings from all samples
     embeddings = []
+    audio_lengths = []
     short_samples = []
     for idx, audio in audio_samples:
         # Handle both filepath (string) and tuple (sr, wav_np) formats
@@ -190,6 +205,7 @@ def enroll(username, audio1, audio2, audio3):
 
         # Check audio length
         audio_length_sec = wav_np.shape[0] / sr
+        audio_lengths.append(audio_length_sec)
         if audio_length_sec < 3.0:
             short_samples.append((idx, audio_length_sec))
 
@@ -197,8 +213,8 @@ def enroll(username, audio1, audio2, audio3):
         embeddings.append(emb)
         print(f"Sample {idx} embedding norm: {np.linalg.norm(emb):.3f}")
 
-    # Store all embeddings separately (not averaged)
-    save_multiple_embeddings(username, embeddings)
+    # Store all embeddings separately (not averaged) with audio lengths
+    save_multiple_embeddings(username, embeddings, audio_lengths)
 
     # Create warning message if any samples were short
     warning_msg = ""
@@ -269,6 +285,117 @@ with gr.Blocks() as demo:
         enrolled_list = gr.Markdown(value=get_enrolled_users())
         gr.Button("Enroll").click(
             enroll, inputs=[u, a1, a2, a3], outputs=[out, enrolled_list]
+        )
+
+    with gr.Tab("Manage Users"):
+        gr.Markdown("### 👥 User Management")
+
+        with gr.Row():
+            user_dropdown = gr.Dropdown(
+                choices=list_users(), label="Select User", interactive=True
+            )
+            refresh_btn = gr.Button("🔄 Refresh List")
+
+        user_info_display = gr.Textbox(
+            label="User Information", lines=5, interactive=False
+        )
+
+        with gr.Row():
+            view_btn = gr.Button("👁️ View Details", variant="secondary")
+            delete_btn = gr.Button("🗑️ Delete User", variant="stop")
+
+        manage_result = gr.Textbox(label="Result")
+
+        def refresh_user_list():
+            users = list_users()
+            return gr.Dropdown(choices=users)
+
+        def view_user_details(username):
+            if not username:
+                return "⚠️ Please select a user"
+
+            info = get_user_info(username)
+            if not info:
+                return f"❌ User '{username}' not found"
+
+            details = f"""**Username:** {info['username']}
+**Enrolled:** {info['created_at']}
+**Last Updated:** {info['updated_at']}
+**Sample Count:** {info['sample_count']}"""
+
+            return details
+
+        def delete_user_action(username):
+            if not username:
+                return "⚠️ Please select a user", gr.Dropdown(choices=list_users())
+
+            success = delete_user(username)
+            if success:
+                users = list_users()
+                return f"✅ User '{username}' deleted successfully", gr.Dropdown(
+                    choices=users
+                )
+            else:
+                return f"❌ Failed to delete user '{username}'", gr.Dropdown(
+                    choices=list_users()
+                )
+
+        refresh_btn.click(refresh_user_list, inputs=[], outputs=[user_dropdown])
+
+        view_btn.click(
+            view_user_details, inputs=[user_dropdown], outputs=[user_info_display]
+        )
+
+        delete_btn.click(
+            delete_user_action,
+            inputs=[user_dropdown],
+            outputs=[manage_result, user_dropdown],
+        )
+
+    with gr.Tab("Statistics"):
+        gr.Markdown("### 📊 Database Statistics")
+
+        stats_display = gr.Textbox(
+            label="System Statistics", lines=10, interactive=False
+        )
+
+        auth_history_display = gr.Textbox(
+            label="Recent Authentication History (Last 10)", lines=15, interactive=False
+        )
+
+        stats_refresh_btn = gr.Button("🔄 Refresh Statistics")
+
+        def display_stats():
+            stats = get_database_stats()
+            stats_text = f"""**Total Users:** {stats['total_users']}
+**Total Embeddings:** {stats['total_embeddings']}
+**Total Auth Attempts:** {stats['total_auth_attempts']}
+**Successful Attempts:** {stats['successful_attempts']}
+**Failed Attempts:** {stats['failed_attempts']}
+**Success Rate:** {stats['success_rate']:.1f}%
+**Recent Attempts (24h):** {stats['recent_attempts_24h']}"""
+
+            history = get_auth_history(limit=10)
+            if history:
+                history_text = "\n".join(
+                    [
+                        f"[{h['timestamp']}] {h['username']}: {'✅ SUCCESS' if h['success'] else '❌ FAILED'} "
+                        f"(score={h['score']:.3f}, threshold={h['threshold']:.2f}, sample={h['matched_sample']})"
+                        for h in history
+                    ]
+                )
+            else:
+                history_text = "No authentication history yet"
+
+            return stats_text, history_text
+
+        # Load initial stats
+        initial_stats, initial_history = display_stats()
+        stats_display.value = initial_stats
+        auth_history_display.value = initial_history
+
+        stats_refresh_btn.click(
+            display_stats, inputs=[], outputs=[stats_display, auth_history_display]
         )
 
 

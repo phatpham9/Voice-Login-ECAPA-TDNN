@@ -54,7 +54,7 @@ venv.bak/
 .env.local
 
 # Database
-voice_db.json
+voice_auth.db
 
 # Logs
 *.log
