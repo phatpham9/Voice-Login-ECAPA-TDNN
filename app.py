@@ -1,9 +1,10 @@
 import torch
 import torchaudio
+import librosa
 import numpy as np
 import gradio as gr
 from speechbrain.inference.speaker import EncoderClassifier
-from db import save_embedding, load_embedding
+from db import save_embedding, load_embedding, list_users
 
 
 # ------------------------------------
@@ -52,7 +53,7 @@ def cosine_similarity(a, b):
 # ------------------------------------
 # Business logic (Enroll / Login)
 # ------------------------------------
-DEFAULT_THRESHOLD = 0.85
+DEFAULT_THRESHOLD = 0.80
 
 
 def login(username, audio, threshold):
@@ -64,10 +65,8 @@ def login(username, audio, threshold):
     # Handle both filepath (string) and tuple (sr, wav_np) formats
     if isinstance(audio, str):
         print(f"Audio received as filepath: {audio}")
-        waveform, sr = torchaudio.load(audio)
-        wav_np = waveform.numpy()
-        if wav_np.ndim > 1:
-            wav_np = wav_np[0]  # Take first channel if stereo
+        # Use librosa to load audio (supports various formats including m4a)
+        wav_np, sr = librosa.load(audio, sr=None, mono=True)
         audio_tuple = (sr, wav_np)
     else:
         sr, wav_np = audio
@@ -99,10 +98,8 @@ def enroll(username, audio):
     # Handle both filepath (string) and tuple (sr, wav_np) formats
     if isinstance(audio, str):
         print(f"Audio received as filepath: {audio}")
-        waveform, sr = torchaudio.load(audio)
-        wav_np = waveform.numpy()
-        if wav_np.ndim > 1:
-            wav_np = wav_np[0]  # Take first channel if stereo
+        # Use librosa to load audio (supports various formats including m4a)
+        wav_np, sr = librosa.load(audio, sr=None, mono=True)
         audio_tuple = (sr, wav_np)
     else:
         sr, wav_np = audio
@@ -115,7 +112,18 @@ def enroll(username, audio):
     emb = extract_embedding(audio_tuple)
     save_embedding(username, emb)
 
-    return f"✅ Enrolled '{username}' — embedding {emb.shape[0]}D"
+    users_list = get_enrolled_users()
+    return f"✅ Enrolled '{username}' — embedding {emb.shape[0]}D", users_list
+
+
+def get_enrolled_users():
+    """Get formatted list of enrolled users"""
+    users = list_users()
+    if not users:
+        return "No enrollments yet"
+    return f"**Enrolled Users ({len(users)}):**\n" + "\n".join(
+        f"• {user}" for user in sorted(users)
+    )
 
 
 # ------------------------------------
@@ -128,7 +136,7 @@ with gr.Blocks() as demo:
         u2 = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
         a2 = gr.Audio(
             sources=["microphone", "upload"],
-            type="numpy",
+            type="filepath",
             label="Record ~3–5s",
         )
         th = gr.Slider(
@@ -141,11 +149,12 @@ with gr.Blocks() as demo:
         u = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
         a = gr.Audio(
             sources=["microphone", "upload"],
-            type="numpy",
+            type="filepath",
             label="Record ~5s",
         )
         out = gr.Textbox(label="Result")
-        gr.Button("Enroll").click(enroll, inputs=[u, a], outputs=[out])
+        enrolled_list = gr.Markdown(value=get_enrolled_users())
+        gr.Button("Enroll").click(enroll, inputs=[u, a], outputs=[out, enrolled_list])
 
 
 if __name__ == "__main__":

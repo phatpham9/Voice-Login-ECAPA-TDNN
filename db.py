@@ -30,3 +30,8 @@ def load_embedding(username: str):
     if username not in db:
         return None
     return np.array(db[username], dtype="float32")
+
+
+def list_users():
+    db = _load_db()
+    return list(db.keys())
