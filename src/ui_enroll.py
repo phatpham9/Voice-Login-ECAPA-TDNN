@@ -5,6 +5,8 @@ Enroll UI tab for voice enrollment.
 import gradio as gr
 import numpy as np
 import random
+import shutil
+from pathlib import Path
 from src.core import (
     ENROLLMENT_TEXTS,
     load_audio_file,
@@ -41,20 +43,38 @@ def enroll(username, audio1, audio2, audio3):
     if len(audio_samples) == 0:
         return "⚠️ Please record at least one voice sample.", None, None, None
 
+    # Create audio_samples directory if it doesn't exist
+    audio_dir = Path("audio_samples")
+    audio_dir.mkdir(exist_ok=True)
+
+    # Create user directory
+    user_dir = audio_dir / username
+    user_dir.mkdir(exist_ok=True)
+
     # Extract embeddings from all samples
     embeddings = []
     audio_lengths = []
+    audio_file_paths = []
     short_samples = []
+
     for idx, audio in audio_samples:
         # Handle both filepath (string) and tuple (sr, wav_np) formats
         if isinstance(audio, str):
             print(f"Sample {idx}: Audio received as filepath: {audio}")
+            # Save audio file to permanent location
+            file_ext = Path(audio).suffix or ".wav"
+            dest_path = user_dir / f"sample_{idx}{file_ext}"
+            shutil.copy2(audio, dest_path)
+            audio_file_paths.append(str(dest_path))
+
             # Use torchaudio to load audio (supports various formats)
             sr, wav_np = load_audio_file(audio)
             audio_tuple = (sr, wav_np)
         else:
             sr, wav_np = audio
             audio_tuple = audio
+            # For tuple format, we'll skip saving (temporary recordings)
+            audio_file_paths.append(None)
 
         print(
             f"Sample {idx}: sr={sr}, shape={wav_np.shape}, max={wav_np.max()}, min={wav_np.min()}"
@@ -70,8 +90,8 @@ def enroll(username, audio1, audio2, audio3):
         embeddings.append(emb)
         print(f"Sample {idx} embedding norm: {np.linalg.norm(emb):.3f}")
 
-    # Store all embeddings separately (not averaged) with audio lengths
-    save_multiple_embeddings(username, embeddings, audio_lengths)
+    # Store all embeddings separately (not averaged) with audio lengths and file paths
+    save_multiple_embeddings(username, embeddings, audio_lengths, audio_file_paths)
 
     # Create warning message if any samples were short
     warning_msg = ""

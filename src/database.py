@@ -53,11 +53,20 @@ def init_database():
                 embedding BLOB NOT NULL,
                 sample_number INTEGER NOT NULL,
                 audio_length_sec REAL,
+                audio_file_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         """
         )
+
+        # Migration: Add audio_file_path column if it doesn't exist
+        try:
+            cursor.execute("SELECT audio_file_path FROM embeddings LIMIT 1")
+        except sqlite3.OperationalError:
+            # Column doesn't exist, add it
+            cursor.execute("ALTER TABLE embeddings ADD COLUMN audio_file_path TEXT")
+            print("✅ Added audio_file_path column to embeddings table")
 
         # Authentication logs table
         cursor.execute(
@@ -103,6 +112,7 @@ def save_multiple_embeddings(
     username: str,
     embeddings: List[np.ndarray],
     audio_lengths: Optional[List[float]] = None,
+    audio_file_paths: Optional[List[str]] = None,
 ):
     """Save multiple embeddings for a user"""
     with get_db_connection() as conn:
@@ -134,12 +144,17 @@ def save_multiple_embeddings(
                 if audio_lengths and len(audio_lengths) >= idx
                 else None
             )
+            audio_path = (
+                audio_file_paths[idx - 1]
+                if audio_file_paths and len(audio_file_paths) >= idx
+                else None
+            )
 
             cursor.execute(
                 """INSERT INTO embeddings 
-                (user_id, embedding, sample_number, audio_length_sec) 
-                VALUES (?, ?, ?, ?)""",
-                (user_id, emb_blob, idx, audio_len),
+                (user_id, embedding, sample_number, audio_length_sec, audio_file_path) 
+                VALUES (?, ?, ?, ?, ?)""",
+                (user_id, emb_blob, idx, audio_len, audio_path),
             )
 
 
@@ -220,6 +235,44 @@ def get_user_info(username: str) -> Optional[dict]:
             "updated_at": row[2],
             "sample_count": row[3],
         }
+
+
+def get_user_samples(username: str) -> Optional[List[dict]]:
+    """Get detailed sample information for a user"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT 
+                e.id,
+                e.sample_number,
+                e.audio_length_sec,
+                e.audio_file_path,
+                e.created_at
+            FROM embeddings e
+            JOIN users u ON e.user_id = u.id
+            WHERE u.username = ?
+            ORDER BY e.sample_number
+        """,
+            (username,),
+        )
+
+        rows = cursor.fetchall()
+
+        if not rows:
+            return None
+
+        return [
+            {
+                "id": row[0],
+                "sample_number": row[1],
+                "audio_length_sec": row[2],
+                "audio_file_path": row[3],
+                "created_at": row[4],
+            }
+            for row in rows
+        ]
 
 
 def log_authentication(
