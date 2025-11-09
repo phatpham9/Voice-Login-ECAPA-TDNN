@@ -1,5 +1,5 @@
 ---
-title: Voice Login ECAPA-TDNN
+title: Voice Login with ECAPA-TDNN
 emoji: 📚
 colorFrom: gray
 colorTo: purple
@@ -8,7 +8,7 @@ sdk_version: 5.49.1
 app_file: app.py
 pinned: true
 license: mit
-short_description: Voice Login — ECAPA-TDNN (SpeechBrain)
+short_description: A text-independent speaker verification system.
 ---
 
 # 🔐 Voice Login with ECAPA-TDNN
