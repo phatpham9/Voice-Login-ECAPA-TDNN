@@ -11,10 +11,9 @@ This module provides tools to calculate and visualize key performance metrics:
 """
 
 import numpy as np
-from typing import List, Tuple, Dict, Optional
+from typing import List, Dict, Optional
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from database import get_auth_history, load_embedding, list_users
+from src.database import get_auth_history, list_users
 from scipy.interpolate import interp1d
 from scipy.optimize import brentq
 

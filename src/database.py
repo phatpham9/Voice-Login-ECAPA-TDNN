@@ -6,14 +6,10 @@ Replaces JSON storage with proper database with audit trail and ACID properties.
 import sqlite3
 import numpy as np
 import pickle
-import json
-import os
-from typing import List, Optional, Tuple
-from datetime import datetime
+from typing import List, Optional
 from contextlib import contextmanager
 
 DB_PATH = "voice_auth.db"
-OLD_JSON_PATH = "voice_db.json"
 
 
 @contextmanager
@@ -101,74 +97,6 @@ def init_database():
         )
 
         print("✅ Database initialized successfully")
-
-
-def migrate_from_json():
-    """Migrate existing JSON data to SQLite database"""
-    if not os.path.exists(OLD_JSON_PATH):
-        print("ℹ️  No JSON file found - starting fresh")
-        return
-
-    try:
-        with open(OLD_JSON_PATH, "r", encoding="utf-8") as f:
-            json_data = json.load(f)
-
-        if not json_data:
-            print("ℹ️  JSON file is empty - nothing to migrate")
-            return
-
-        migrated_count = 0
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-
-            for username, embeddings_data in json_data.items():
-                # Check if user already exists
-                cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
-                existing_user = cursor.fetchone()
-
-                if existing_user:
-                    print(f"⚠️  User '{username}' already exists - skipping")
-                    continue
-
-                # Insert user
-                cursor.execute("INSERT INTO users (username) VALUES (?)", (username,))
-                user_id = cursor.lastrowid
-
-                # Handle both single embedding and multiple embeddings
-                if isinstance(embeddings_data[0], list):
-                    # Multiple embeddings
-                    embeddings_list = embeddings_data
-                else:
-                    # Single embedding (backward compatibility)
-                    embeddings_list = [embeddings_data]
-
-                # Insert embeddings
-                for idx, emb_list in enumerate(embeddings_list, start=1):
-                    emb_array = np.array(emb_list, dtype="float32")
-                    emb_blob = pickle.dumps(emb_array)
-
-                    cursor.execute(
-                        """INSERT INTO embeddings 
-                        (user_id, embedding, sample_number) 
-                        VALUES (?, ?, ?)""",
-                        (user_id, emb_blob, idx),
-                    )
-
-                migrated_count += 1
-                print(
-                    f"✅ Migrated user '{username}' with {len(embeddings_list)} sample(s)"
-                )
-
-        print(f"\n🎉 Migration complete! Migrated {migrated_count} user(s)")
-
-        # Create backup of JSON file
-        backup_path = f"{OLD_JSON_PATH}.backup"
-        os.rename(OLD_JSON_PATH, backup_path)
-        print(f"📦 Original JSON backed up to: {backup_path}")
-
-    except Exception as e:
-        print(f"❌ Migration failed: {e}")
-        raise
 
 
 def save_multiple_embeddings(
@@ -403,8 +331,3 @@ def get_database_stats() -> dict:
 
 # Initialize database on module import
 init_database()
-
-# Auto-migrate from JSON if it exists
-if os.path.exists(OLD_JSON_PATH):
-    print("\n🔄 Found existing JSON database - starting migration...")
-    migrate_from_json()

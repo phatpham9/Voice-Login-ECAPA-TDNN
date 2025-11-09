@@ -2,11 +2,10 @@ import torch
 import torchaudio
 import numpy as np
 import gradio as gr
-import warnings
 import json
 import random
 from speechbrain.inference.speaker import EncoderClassifier
-from database import (
+from src.database import (
     save_multiple_embeddings,
     load_embedding,
     list_users,
@@ -595,7 +594,7 @@ with gr.Blocks() as demo:
         confusion_matrix_plot = gr.Plot(label="Confusion Matrix")
 
         def update_metrics_dashboard(threshold):
-            from performance_metrics import (
+            from src.performance_metrics import (
                 collect_test_data,
                 generate_metrics_summary,
                 generate_roc_curve,
