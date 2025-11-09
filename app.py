@@ -227,7 +227,7 @@ def get_enroll_texts():
 
 def enroll(username, audio1, audio2, audio3):
     if not username:
-        return "⚠️ Please enter a username.", None, None, None, None
+        return "⚠️ Please enter a username.", None, None, None
 
     # Collect all provided audio samples
     audio_samples = []
@@ -236,7 +236,7 @@ def enroll(username, audio1, audio2, audio3):
             audio_samples.append((i, audio))
 
     if len(audio_samples) == 0:
-        return "⚠️ Please record at least one voice sample.", None, None, None, None
+        return "⚠️ Please record at least one voice sample.", None, None, None
 
     # Extract embeddings from all samples
     embeddings = []
@@ -278,14 +278,11 @@ def enroll(username, audio1, audio2, audio3):
         )
         warning_msg = f"\n\n⚠️ Warning: Short audio detected - {short_list}. For better verification accuracy, consider re-enrolling with 3-5+ seconds of speech per sample."
 
-    users_list = get_enrolled_users()
-
     # Get new random texts for next enrollment
     text1, text2, text3 = get_enroll_texts()
 
     return (
         f"✅ Enrolled '{username}' with {len(embeddings)} sample(s) — {embeddings[0].shape[-1]}D embeddings stored separately{warning_msg}",
-        users_list,
         text1,
         text2,
         text3,
@@ -311,114 +308,141 @@ with gr.Blocks() as demo:
     with gr.Tab("Login"):
         u2 = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
 
-        gr.Markdown("### 📖 Please read the following text:")
-        login_text_display = gr.Textbox(
-            label="Text to Read",
-            value=get_login_text(),
-            lines=4,
-            interactive=False,
-            elem_id="login_text",
-        )
-
-        with gr.Row():
+        with gr.Group():
+            a2 = gr.Audio(
+                sources=["microphone", "upload"],
+                type="filepath",
+                label="Record yourself reading the text below (3-10s)",
+            )
+            login_text_display = gr.Textbox(
+                label="Text to Read",
+                value=get_login_text(),
+                lines=2,
+                interactive=False,
+                elem_id="login_text",
+            )
             refresh_login_text_btn = gr.Button("🔄 Get New Text", size="sm")
 
-        a2 = gr.Audio(
-            sources=["microphone", "upload"],
-            type="filepath",
-            label="Record yourself reading the text above (3-10s)",
-        )
         th = gr.Slider(
             0.50, 0.98, value=DEFAULT_THRESHOLD, step=0.01, label="Threshold (cosine)"
         )
-        out2 = gr.Textbox(label="Result")
 
-        gr.Button("Login").click(login, inputs=[u2, a2, th], outputs=[out2])
+        login_btn = gr.Button("Login", variant="primary")
+
+        out = gr.Textbox(label="Result")
+
         refresh_login_text_btn.click(
             get_login_text, inputs=[], outputs=[login_text_display]
         )
+        login_btn.click(login, inputs=[u2, a2, th], outputs=[out])
 
     with gr.Tab("Enroll"):
         u = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
-        gr.Markdown("### 📖 Read the texts below for each sample")
-        gr.Markdown("*Tip: Record yourself reading each text clearly (3-10s each).*")
 
         # Get initial random texts
         initial_text1, initial_text2, initial_text3 = get_enroll_texts()
 
         gr.Markdown("#### Sample 1 (Required)")
-        text1_display = gr.Textbox(
-            label="Text to Read for Sample 1",
-            value=initial_text1,
-            lines=3,
-            interactive=False,
-        )
-        a1 = gr.Audio(
-            sources=["microphone", "upload"],
-            type="filepath",
-            label="Record Sample 1",
-        )
+        with gr.Group():
+            a1 = gr.Audio(
+                sources=["microphone", "upload"],
+                type="filepath",
+                label="Record yourself reading the text below (3-10s)",
+            )
+            text1_display = gr.Textbox(
+                label="Text to Read for Sample 1",
+                value=initial_text1,
+                lines=2,
+                interactive=False,
+            )
+            refresh_text1_btn = gr.Button("🔄 Get New Text", size="sm")
 
         gr.Markdown("#### Sample 2 (Optional)")
-        text2_display = gr.Textbox(
-            label="Text to Read for Sample 2",
-            value=initial_text2,
-            lines=3,
-            interactive=False,
-        )
-        a2 = gr.Audio(
-            sources=["microphone", "upload"],
-            type="filepath",
-            label="Record Sample 2",
-        )
+        with gr.Group():
+            a2 = gr.Audio(
+                sources=["microphone", "upload"],
+                type="filepath",
+                label="Record yourself reading the text below (3-10s)",
+            )
+            text2_display = gr.Textbox(
+                label="Text to Read for Sample 2",
+                value=initial_text2,
+                lines=2,
+                interactive=False,
+            )
+            refresh_text2_btn = gr.Button("🔄 Get New Text", size="sm")
 
         gr.Markdown("#### Sample 3 (Optional)")
-        text3_display = gr.Textbox(
-            label="Text to Read for Sample 3",
-            value=initial_text3,
-            lines=3,
-            interactive=False,
-        )
-        a3 = gr.Audio(
-            sources=["microphone", "upload"],
-            type="filepath",
-            label="Record Sample 3",
-        )
+        with gr.Group():
+            a3 = gr.Audio(
+                sources=["microphone", "upload"],
+                type="filepath",
+                label="Record yourself reading the text below (3-10s)",
+            )
+            text3_display = gr.Textbox(
+                label="Text to Read for Sample 3",
+                value=initial_text3,
+                lines=2,
+                interactive=False,
+            )
+            refresh_text3_btn = gr.Button("🔄 Get New Text", size="sm")
 
-        with gr.Row():
-            refresh_enroll_texts_btn = gr.Button("🔄 Get New Texts", size="sm")
+        enroll_btn = gr.Button("Enroll", variant="primary")
 
         out = gr.Textbox(label="Result")
-        enrolled_list = gr.Markdown(value=get_enrolled_users())
 
-        gr.Button("Enroll").click(
+        enroll_btn.click(
             enroll,
             inputs=[u, a1, a2, a3],
-            outputs=[out, enrolled_list, text1_display, text2_display, text3_display],
+            outputs=[out, text1_display, text2_display, text3_display],
         )
 
-        refresh_enroll_texts_btn.click(
-            get_enroll_texts,
+        # Individual refresh buttons for each text
+        refresh_text1_btn.click(
+            lambda: get_enroll_texts()[0],
             inputs=[],
-            outputs=[text1_display, text2_display, text3_display],
+            outputs=[text1_display],
+        )
+        refresh_text2_btn.click(
+            lambda: get_enroll_texts()[1],
+            inputs=[],
+            outputs=[text2_display],
+        )
+        refresh_text3_btn.click(
+            lambda: get_enroll_texts()[2],
+            inputs=[],
+            outputs=[text3_display],
         )
 
     with gr.Tab("Manage Users"):
-        gr.Markdown("### 👥 User Management")
+        # Get initial user list and first user
+        initial_users = list_users()
+        initial_user = initial_users[0] if initial_users else None
 
-        with gr.Row():
+        with gr.Group():
             user_dropdown = gr.Dropdown(
-                choices=list_users(), label="Select User", interactive=True
+                choices=initial_users,
+                label="Select User",
+                interactive=True,
+                value=initial_user,
             )
-            refresh_btn = gr.Button("🔄 Refresh List")
+            refresh_btn = gr.Button("🔄 Refresh List", size="sm")
+
+        # Get initial user info
+        initial_info = ""
+        if initial_user:
+            info = get_user_info(initial_user)
+            if info:
+                initial_info = f"""**Username:** {info['username']}
+**Enrolled:** {info['created_at']}
+**Last Updated:** {info['updated_at']}
+**Sample Count:** {info['sample_count']}"""
 
         user_info_display = gr.Textbox(
-            label="User Information", lines=5, interactive=False
+            label="User Information", lines=5, interactive=False, value=initial_info
         )
 
-        with gr.Row():
-            view_btn = gr.Button("👁️ View Details", variant="secondary")
-            delete_btn = gr.Button("🗑️ Delete User", variant="stop")
+        delete_btn = gr.Button("🗑️ Delete User", variant="stop")
 
         manage_result = gr.Textbox(label="Result")
 
@@ -428,7 +452,7 @@ with gr.Blocks() as demo:
 
         def view_user_details(username):
             if not username:
-                return "⚠️ Please select a user"
+                return ""
 
             info = get_user_info(username)
             if not info:
@@ -443,29 +467,34 @@ with gr.Blocks() as demo:
 
         def delete_user_action(username):
             if not username:
-                return "⚠️ Please select a user", gr.Dropdown(choices=list_users())
+                return "⚠️ Please select a user", gr.Dropdown(choices=list_users()), ""
 
             success = delete_user(username)
             if success:
                 users = list_users()
-                return f"✅ User '{username}' deleted successfully", gr.Dropdown(
-                    choices=users
+                return (
+                    f"✅ User '{username}' deleted successfully",
+                    gr.Dropdown(choices=users),
+                    "",
                 )
             else:
-                return f"❌ Failed to delete user '{username}'", gr.Dropdown(
-                    choices=list_users()
+                return (
+                    f"❌ Failed to delete user '{username}'",
+                    gr.Dropdown(choices=list_users()),
+                    "",
                 )
 
         refresh_btn.click(refresh_user_list, inputs=[], outputs=[user_dropdown])
 
-        view_btn.click(
+        # Automatically show details when user is selected
+        user_dropdown.change(
             view_user_details, inputs=[user_dropdown], outputs=[user_info_display]
         )
 
         delete_btn.click(
             delete_user_action,
             inputs=[user_dropdown],
-            outputs=[manage_result, user_dropdown],
+            outputs=[manage_result, user_dropdown, user_info_display],
         )
 
     with gr.Tab("Statistics"):
