@@ -4,3 +4,4 @@ torch==2.4.1
 torchaudio==2.4.1
 numpy==1.26.4
 huggingface-hub==0.26.2
+soundfile==0.12.1
