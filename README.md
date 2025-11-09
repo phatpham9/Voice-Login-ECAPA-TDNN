@@ -1,3 +1,16 @@
+---
+title: Voice Login ECAPA-TDNN
+emoji: 📚
+colorFrom: gray
+colorTo: purple
+sdk: gradio
+sdk_version: 5.49.1
+app_file: app.py
+pinned: true
+license: mit
+short_description: Voice Login — ECAPA-TDNN (SpeechBrain)
+---
+
 # 🔐 Voice Login with ECAPA-TDNN
 
 A text-independent speaker verification system built with ECAPA-TDNN (Emphasized Channel Attention, Propagation and Aggregation in Time Delay Neural Network) from SpeechBrain. This application provides a complete voice-based authentication solution with enrollment, verification, and comprehensive performance analytics.
