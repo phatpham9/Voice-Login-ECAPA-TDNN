@@ -303,9 +303,13 @@ def get_enrolled_users():
 # Gradio UI
 # ------------------------------------
 with gr.Blocks() as demo:
-    gr.Markdown("# 🔐 Voice Login — ECAPA-TDNN (SpeechBrain)")
+    gr.Markdown(
+        "# 🔐 Voice Login with ECAPA-TDNN\nA text-independent speaker verification system built with ECAPA-TDNN (Emphasized Channel Attention, Propagation and Aggregation in Time Delay Neural Network) from SpeechBrain."
+    )
 
     with gr.Tab("Login"):
+        gr.Markdown("### 🔑 Voice Authentication")
+
         u2 = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
 
         with gr.Group():
@@ -337,6 +341,8 @@ with gr.Blocks() as demo:
         login_btn.click(login, inputs=[u2, a2, th], outputs=[out])
 
     with gr.Tab("Enroll"):
+        gr.Markdown("### 🎤 Voice Enrollment")
+
         u = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
 
         # Get initial random texts
@@ -415,6 +421,8 @@ with gr.Blocks() as demo:
         )
 
     with gr.Tab("Manage Users"):
+        gr.Markdown("### 👥 User Management")
+
         # Get initial user list and first user
         initial_users = list_users()
         initial_user = initial_users[0] if initial_users else None

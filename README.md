@@ -1,58 +1,51 @@
----
-title: Voice Login ECAPA-TDNN
-emoji: 📚
-colorFrom: gray
-colorTo: purple
-sdk: gradio
-sdk_version: 5.49.1
-app_file: app.py
-pinned: true
-license: mit
-short_description: Voice Login — ECAPA-TDNN (SpeechBrain)
----
-
 # 🔐 Voice Login with ECAPA-TDNN
 
-A text-independent speaker verification system using ECAPA-TDNN (Emphasized Channel Attention, Propagation and Aggregation in Time Delay Neural Network) from SpeechBrain. This application enables voice-based user enrollment and authentication.
+A text-independent speaker verification system built with ECAPA-TDNN (Emphasized Channel Attention, Propagation and Aggregation in Time Delay Neural Network) from SpeechBrain. This application provides a complete voice-based authentication solution with enrollment, verification, and comprehensive performance analytics.
+
+## 🎯 Overview
+
+This system extracts unique voice characteristics (192-dimensional embeddings) from speech recordings to authenticate users. It's language-independent and doesn't require specific phrases, making it flexible and user-friendly.
+
+**Key Capabilities:**
+- Voice-based user enrollment with multi-sample support
+- Real-time speaker verification and authentication
+- Performance metrics and analytics dashboard
+- SQLite database with full audit trail
+- Interactive web interface powered by Gradio
 
 ## ✨ Features
 
-### Core Functionality
-- **Text-Independent**: Works with any spoken content, no specific phrases required
-- **Multi-language Support**: Works with Vietnamese, English, and other languages
-- **Pre-trained Model**: Uses SpeechBrain's pre-trained ECAPA-TDNN on VoxCeleb dataset
-- **No Fine-tuning Required**: Ready to use out of the box
-- **Simple Gradio Interface**: Easy-to-use web interface for enrollment and login
-- **Adjustable Threshold**: Configurable similarity threshold for authentication (default: 0.80)
-- **Multiple Sample Enrollment**: Support 1-3 voice samples per user for improved accuracy
-- **Best Match Verification**: Compares against all enrolled samples and uses the highest score
-- **Smart Audio Normalization**: Automatically handles audio length (3-15 seconds)
-- **Audio Quality Warnings**: Provides feedback when recordings are too short for optimal accuracy
+### 🎤 Voice Login
+- **Text-Independent**: Works with any spoken content - no fixed passphrases needed
+- **Multi-Language Support**: Compatible with any language (Vietnamese, English, etc.)
+- **Multiple Samples**: Enroll with 1-3 voice samples per user for improved accuracy
+- **Best Match Algorithm**: Compares against all stored samples and uses the highest similarity score
+- **Smart Audio Processing**: Automatic normalization (3-15 seconds) with quality feedback
+- **Adjustable Threshold**: Configurable similarity threshold (default: 0.80) for security vs. usability balance
 
-### Performance Metrics Dashboard
-- **FAR/FRR Analysis**: Calculate False Acceptance and False Rejection Rates
-- **EER Calculation**: Find optimal threshold (Equal Error Rate) using interpolation
-- **ROC Curve**: Receiver Operating Characteristic with AUC score
-- **DET Curve**: Detection Error Tradeoff with log-scale visualization
-- **Score Distribution**: Genuine vs impostor score histograms
-- **Confusion Matrix**: TP/TN/FP/FN breakdown with heatmap
-- **Interactive Threshold Analysis**: Real-time metric updates as you adjust threshold
-- **Smart Recommendations**: Actionable suggestions based on your data
-- **Comprehensive Documentation**: User guide with examples and troubleshooting
+### 📊 Performance Analytics
+- **FAR/FRR Analysis**: False Acceptance and False Rejection Rate calculations
+- **EER Calculation**: Automatic Equal Error Rate determination for optimal threshold tuning
+- **ROC Curve**: Receiver Operating Characteristic with AUC scoring
+- **DET Curve**: Detection Error Tradeoff visualization with log-scale plots
+- **Score Distributions**: Histograms comparing genuine vs. impostor scores
+- **Confusion Matrix**: Detailed breakdown of authentication results (TP/TN/FP/FN)
+- **Interactive Threshold Testing**: Real-time metric updates as you adjust thresholds
+- **Smart Recommendations**: Data-driven suggestions for system optimization
 
-### Data Management
-- **SQLite Database**: Professional database with ACID properties
-- **Audit Trail**: Complete authentication history logging
-- **User Management**: View, delete, and manage enrolled users
-- **Statistics Dashboard**: System-wide statistics and recent activity
-- **Data Migration**: Automatic migration from old JSON format
+### 🗄️ Data Management
+- **SQLite Database**: Robust storage with ACID properties and transaction support
+- **Complete Audit Trail**: Logs every authentication attempt with timestamp and score
+- **User Management**: Easy interface to view, update, and delete enrolled users
+- **Statistics Dashboard**: System-wide metrics and recent activity monitoring
+- **Auto-Migration**: Seamless upgrade from legacy JSON format
 
-## 🎯 How It Works
-
-The system uses ECAPA-TDNN to extract 192-dimensional speaker embeddings from voice recordings. These embeddings capture the unique characteristics of a person's voice and are used for:
-
-1. **Enrollment**: Register a user by recording 1-3 voice samples. Each sample is stored as a separate embedding.
-2. **Authentication**: Verify identity by comparing a new voice sample with ALL stored embeddings using cosine similarity, and using the best (maximum) score.
+### 🎨 User Interface
+- **Gradio Web Interface**: Clean, intuitive interface accessible via browser
+- **Enrollment Tab**: Step-by-step voice sample collection with guided prompts
+- **Login Tab**: Quick authentication with real-time feedback
+- **Metrics Tab**: Interactive performance dashboard with charts and analysis
+- **Management Tab**: User administration and system statistics
 
 ## 🚀 Quick Start
 
@@ -60,275 +53,158 @@ The system uses ECAPA-TDNN to extract 192-dimensional speaker embeddings from vo
 
 ```bash
 # Clone the repository
-git clone phatpham9/Voice-Login-ECAPA-TDN
+git clone https://github.com/phatpham9/Voice-Login-ECAPA-TDNN.git
 cd Voice-Login-ECAPA-TDNN
 
 # Install dependencies with uv (recommended)
 uv venv
 uv pip install -r requirements.txt
 
-# Or with pip
+# Or use pip
 pip install -r requirements.txt
 ```
 
-### Run the Application
+### Running the Application
 
-#### Production Mode
+**Production Mode:**
 ```bash
-# With uv
 uv run app.py
-
-# Or with python
-python app.py
+# or: python app.py
 ```
 
-#### Development Mode (with auto-reload)
+**Development Mode (auto-reload on code changes):**
 ```bash
-# With uv (recommended)
 uv run gradio app.py
-
-# Or with gradio CLI
-gradio app.py
+# or: gradio app.py
 ```
 
-The application will launch a Gradio interface in your browser. In development mode, the server will automatically reload when you make changes to the code.
+The Gradio interface will launch in your browser at `http://localhost:7860`
 
 ## 📋 Requirements
 
-- Python 3.8+
-- PyTorch 2.0.0 - 2.4.x
-- TorchAudio 2.0.0 - 2.4.x
-- Gradio
-- SpeechBrain
-- NumPy
-- SoundFile
-- Librosa
+- **Python**: 3.8 or higher
+- **PyTorch**: 2.0.0 - 2.4.x
+- **TorchAudio**: 2.0.0 - 2.4.x
+- Gradio, SpeechBrain, NumPy, SoundFile
 - Plotly 5.0+ (for metrics dashboard)
 - SciPy 1.9+ (for EER calculation)
 
-See `requirements.txt` for full dependencies.
+See `requirements.txt` for complete dependencies.
 
-## 🎮 Usage
+## 📖 How to Use
 
 ### Enrollment
 
-1. Navigate to the **Enroll** tab
-2. Enter a username
-3. Record 1-3 voice samples:
-   - **Sample 1 (Required)**: Record 3-10 seconds of speech
-   - **Sample 2 (Optional)**: Record another 3-10 seconds with different content
-   - **Sample 3 (Optional)**: Record a third sample for even better accuracy
-4. Click "Enroll" to save the voice profile
-5. Each sample is stored separately (not averaged)
+1. Open the **Enroll** tab
+2. Enter a unique username
+3. Record 1-3 voice samples (3-10 seconds each):
+   - Sample 1 (required): Natural speech, minimum 3 seconds
+   - Samples 2-3 (optional): Additional samples improve accuracy
+4. Click **Enroll** to register the voice profile
 
-**Tips for better enrollment:**
-- Record at least 3-5 seconds per sample
-- Use natural speech, not just a single word
-- Vary your phrases across samples
-- Avoid very short clips that require heavy padding
+**Tips:**
+- Speak naturally for 5+ seconds per sample
+- Use different phrases for each sample
+- Record in a quiet environment
+- Each sample is stored separately for better matching
 
-### Login
+### Authentication
 
-1. Navigate to the **Login** tab
+1. Open the **Login** tab
 2. Enter your username
-3. Record 3-10 seconds of speech (or upload an audio file)
-4. Adjust the similarity threshold if needed (default: 0.80)
-5. Click "Login" to authenticate
-6. The system compares your audio against ALL enrolled samples and uses the best match
+3. Record your voice (3-10 seconds of speech)
+4. Optionally adjust the similarity threshold (default: 0.80)
+5. Click **Login** to verify
 
-**Login features:**
-- Automatic audio length normalization (min 3s, max 15s)
-- Warnings for audio that's too short
-- Shows which enrolled sample matched best
-- Displays similarity score and threshold
+The system compares your voice against all enrolled samples and uses the best match score.
 
-### Performance Metrics Dashboard
+### Performance Analytics
 
-Navigate to the **Performance Metrics** tab to analyze system performance scientifically:
+Access the **Performance Metrics** tab to analyze system performance:
 
-**Key Metrics:**
-- **FAR (False Acceptance Rate)**: Percentage of impostors incorrectly accepted
-- **FRR (False Rejection Rate)**: Percentage of genuine users incorrectly rejected  
-- **EER (Equal Error Rate)**: Optimal threshold where FAR = FRR
-- **AUC**: Area Under ROC Curve (overall system quality)
+**Available Metrics:**
+- **FAR/FRR**: False Acceptance and False Rejection Rates
+- **EER**: Equal Error Rate (optimal threshold point)
+- **ROC Curve**: True Positive vs False Positive rate
+- **DET Curve**: Detection Error Tradeoff visualization
+- **Score Distribution**: Genuine vs impostor score analysis
+- **Confusion Matrix**: Detailed classification breakdown
 
-**Visualizations:**
-- 📈 **ROC Curve**: True Positive Rate vs False Positive Rate
-- 📊 **DET Curve**: Detection Error Tradeoff (log-scale)
-- 📉 **FAR/FRR vs Threshold**: Find optimal operating point
-- 📊 **Score Distribution**: Genuine vs impostor score histograms
-- 🎯 **Confusion Matrix**: Classification results breakdown
+**Requirements:**
+- Minimum 10 genuine + 10 impostor attempts for meaningful analysis
+- Recommended: 20+ attempts of each type
 
-**How to Use:**
-1. Enroll 3-5 users with 2-3 voice samples each
-2. Perform successful and failed authentication attempts (at least 20+ total)
-3. Navigate to "Performance Metrics" tab
-4. Adjust threshold slider to see real-time metric changes
-5. Use recommendations to optimize your threshold setting
+### Threshold Tuning
 
-**Requirements for Meaningful Metrics:**
-- Minimum: 10 genuine + 10 impostor attempts
-- Recommended: 20+ genuine + 20+ impostor attempts
+- **0.85-0.95**: High security, may reject some legitimate users
+- **0.80** (default): Balanced security and convenience
+- **0.65-0.75**: More permissive, lower security
 
-**Documentation:**
-- See `PERFORMANCE_METRICS_GUIDE.md` for comprehensive user guide
-- See `PERFORMANCE_METRICS_README.md` for quick start
-- Run `uv run demo_metrics.py` to test with sample data
+Use the Performance Metrics tab to find the optimal threshold for your use case.
 
-### Threshold Adjustment
-
-- **Higher threshold (0.85-0.98)**: More secure but may reject legitimate users
-- **Lower threshold (0.60-0.75)**: More permissive but less secure
-- **Default (0.80)**: Balanced security and usability
-- Adjust based on your security requirements and audio quality
-
-### Understanding Results
-
-**Successful Login:**
-```
-✅ SUCCESS — score=0.823 ≥ threshold=0.80 (matched sample 2/3)
-```
-This means your voice matched enrolled sample #2 with a score of 0.823.
-
-**Failed Login:**
-```
-❌ DENIED — score=0.754 < threshold=0.80
-
-⚠️ Warning: Audio is very short (1.2s). For better accuracy, record at least 3-5 seconds of speech.
-```
-The system provides helpful feedback on why verification failed.
-
-## 🏗️ Architecture
+## 🏗️ Project Structure
 
 ```
 Voice-Login-ECAPA-TDNN/
-├── app.py                        # Main Gradio application with UI tabs
-├── database.py                   # SQLite database for embeddings & logs
-├── performance_metrics.py        # Performance analysis & visualization (NEW!)
-├── test_metrics.py               # Unit tests for metrics module
-├── demo_metrics.py               # Demo script with sample data
-├── requirements.txt              # Python dependencies
-├── voice_auth.db                 # SQLite database (created at runtime)
-├── PERFORMANCE_METRICS_GUIDE.md  # Comprehensive metrics documentation
-├── PERFORMANCE_METRICS_README.md # Quick start guide for metrics
-├── IMPLEMENTATION_SUMMARY.md     # Implementation details
-└── ecapa/                        # Pre-trained ECAPA-TDNN model files
-    ├── classifier.ckpt
-    ├── embedding_model.ckpt
-    ├── hyperparams.yaml
-    ├── label_encoder.ckpt
-    └── mean_var_norm_emb.ckpt
+├── app.py                    # Main Gradio application
+├── database.py               # SQLite database operations
+├── performance_metrics.py    # Performance analysis & visualization
+├── requirements.txt          # Python dependencies
+├── enrollment_texts.json     # Sample enrollment prompts
+├── voice_auth.db            # SQLite database (auto-created)
+└── ecapa/                   # Pre-trained model files (auto-downloaded)
 ```
 
 ## 🔬 Technical Details
 
-### ECAPA-TDNN Model
-
+### Model Architecture
+- **Model**: ECAPA-TDNN (SpeechBrain pre-trained)
 - **Source**: `speechbrain/spkrec-ecapa-voxceleb`
-- **Embedding Dimension**: 192D
-- **Training Dataset**: VoxCeleb (1M+ utterances, 7k+ speakers)
+- **Embedding Size**: 192 dimensions
+- **Training Data**: VoxCeleb (1M+ utterances, 7000+ speakers)
 - **Similarity Metric**: Cosine similarity
 
-### Audio Processing Pipeline
+### Audio Processing
+1. Convert to mono (if stereo)
+2. Resample to 16kHz
+3. Normalize length (3-15 seconds)
+4. Extract 192D embedding via ECAPA-TDNN
+5. Compare using cosine similarity
 
-1. **Input**: Audio file or microphone recording (any format supported by librosa)
-2. **Conversion**: Convert to mono if stereo
-3. **Resampling**: Resample to 16kHz (ECAPA-TDNN requirement)
-4. **Normalization**: 
-   - Minimum length: 3 seconds (padded with silence if shorter)
-   - Maximum length: 15 seconds (trimmed if longer)
-   - Optimal range: 3-10 seconds of actual speech
-5. **Embedding Extraction**: ECAPA-TDNN generates 192D speaker embedding
-6. **Storage/Comparison**: 
-   - Enrollment: Store raw embeddings (up to 3 per user)
-   - Login: Compare with all stored embeddings, use best match
+### Multi-Sample Strategy
+- Each enrollment sample stored separately (not averaged)
+- During verification, compares against all stored embeddings
+- Uses maximum similarity score for robust matching
+- More resilient to recording condition variations
 
-### Multiple Sample Strategy
+## 💡 Best Practices
 
-Instead of averaging embeddings (which can dilute unique characteristics), the system:
-- Stores each enrollment sample as a separate embedding
-- During verification, compares against ALL stored samples
-- Uses the **maximum (best) similarity score**
-- This approach is more robust to variations in recording conditions
+**For Better Accuracy:**
+- Record 5-10 seconds of natural speech per sample
+- Use 2-3 enrollment samples per user
+- Maintain consistent recording conditions
+- Ensure quiet environment with good microphone
 
-### Audio Format Support
+**Troubleshooting:**
+- Low scores? Check audio length (3+ seconds) and quality
+- High false acceptance? Increase threshold (0.85-0.90)
+- High false rejection? Lower threshold (0.70-0.75) or re-enroll with better samples
 
-- **Sample Rate**: Any (automatically resampled to 16kHz)
-- **Channels**: Mono or Stereo (stereo is averaged to mono)
-- **Formats**: WAV, MP3, M4A, FLAC, OGG, and more (via librosa/audioread)
-- **Input Methods**: Microphone recording or file upload
+## 🎓 Academic Context
 
-## 🎯 Best Practices
-
-### For Optimal Accuracy:
-
-1. **Recording Length**: 
-   - Aim for 5-10 seconds of continuous speech
-   - Avoid very short clips (< 2 seconds)
-   - Don't exceed 15 seconds (will be trimmed)
-
-2. **Recording Quality**:
-   - Use a good microphone in a quiet environment
-   - Speak naturally at normal volume
-   - Avoid background noise and echo
-
-3. **Enrollment Strategy**:
-   - Record 2-3 samples if possible
-   - Use different phrases/sentences for each sample
-   - Enroll and verify under similar conditions
-
-4. **Threshold Selection**:
-   - Start with default (0.80)
-   - Lower (0.70-0.75) for convenience
-   - Raise (0.85-0.90) for higher security
-
-### Troubleshooting
-
-**Low similarity scores?**
-- Ensure recordings are long enough (3+ seconds)
-- Check audio quality (no distortion/clipping)
-- Try enrolling with longer samples
-- Consider lowering the threshold
-
-**Different users getting high scores?**
-- Increase the threshold (0.85-0.90)
-- Ensure enrollment samples are representative
-- Check for audio quality issues
-
-## 🎓 Educational Context
-
-This project is part of the **Advanced Image Processing** course at Saigon University (SGU). It demonstrates practical applications of deep learning in biometric authentication and signal processing.
-
-### Key Learning Outcomes:
-- Speaker verification using deep learning
-- Audio signal processing and feature extraction
-- Biometric authentication systems
-- Practical deployment with Gradio
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [SpeechBrain](https://speechbrain.github.io/) for the pre-trained ECAPA-TDNN model
-- [VoxCeleb](https://www.robots.ox.ac.uk/~vgg/data/voxceleb/) dataset for model training
-- [Gradio](https://gradio.app/) for the web interface framework
+Developed as part of the **Advanced Image Processing** course at Saigon University (SGU), demonstrating practical applications of deep learning in biometric authentication and audio signal processing.
 
 ## 📚 References
 
-- [ECAPA-TDNN Paper](https://arxiv.org/abs/2005.07143)
-- [SpeechBrain Documentation](https://speechbrain.readthedocs.io/)
-- [Speaker Recognition on HuggingFace](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb)
+- **ECAPA-TDNN Paper**: [Arxiv 2005.07143](https://arxiv.org/abs/2005.07143)
+- **SpeechBrain**: [Documentation](https://speechbrain.readthedocs.io/)
+- **Model**: [HuggingFace Model Card](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb)
+- **VoxCeleb Dataset**: [Official Website](https://www.robots.ox.ac.uk/~vgg/data/voxceleb/)
 
-## 🤝 Contributing
+## 📝 License
 
-Contributions are welcome! Feel free to submit issues or pull requests.
-
-## 📧 Contact
-
-For questions or feedback, please contact the course instructor or create an issue in the repository.
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Note**: This is an educational project for demonstration purposes. For production use, consider additional security measures such as liveness detection, secure storage, and multi-factor authentication.
+**Note**: This is an educational project. For production deployment, implement additional security measures including liveness detection, encrypted storage, and multi-factor authentication.
