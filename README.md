@@ -146,14 +146,30 @@ Use the Performance Metrics tab to find the optimal threshold for your use case.
 
 ```
 Voice-Login-ECAPA-TDNN/
-├── app.py                    # Main Gradio application
-├── database.py               # SQLite database operations
-├── performance_metrics.py    # Performance analysis & visualization
-├── requirements.txt          # Python dependencies
-├── enrollment_texts.json     # Sample enrollment prompts
+├── app.py                   # Main application entry point (30 lines)
+├── src/                     # Source code modules
+│   ├── __init__.py          # Package initialization
+│   ├── core.py              # Core utilities (model, audio processing, embeddings)
+│   ├── database.py          # SQLite database operations
+│   ├── metrics.py           # Performance analysis & visualization
+│   ├── ui_login.py          # Login tab UI
+│   ├── ui_enroll.py         # Enrollment tab UI
+│   ├── ui_manage.py         # User management tab UI
+│   ├── ui_statistics.py     # Statistics tab UI
+│   └── ui_metrics.py        # Performance metrics tab UI
+├── requirements.txt         # Python dependencies
+├── enrollment_texts.json    # Sample enrollment prompts
 ├── voice_auth.db            # SQLite database (auto-created)
-└── ecapa/                   # Pre-trained model files (auto-downloaded)
+├── ecapa/                   # Pre-trained model files (auto-downloaded)
+└── README.md                # This file
 ```
+
+**Module Overview:**
+- **app.py**: Orchestrates all UI tabs and launches the Gradio interface
+- **src/core.py**: ECAPA-TDNN model loading, audio processing, embedding extraction
+- **src/database.py**: SQLite operations, user management, authentication logging
+- **src/metrics.py**: FAR/FRR/EER calculations, ROC/DET curves, visualizations
+- **src/ui_*.py**: Individual UI tabs with their respective business logic
 
 ## 🔬 Technical Details
 
