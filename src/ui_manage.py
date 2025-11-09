@@ -28,14 +28,12 @@ def create_manage_users_tab():
 
         # Get initial user info and samples
         initial_info = ""
-        initial_audio_values = [None, None, None, None, None]
-        initial_audio_visible = [False, False, False, False, False]
+        initial_audio_values = [None, None, None]
+        initial_audio_visible = [False, False, False]
         initial_audio_labels = [
             "Sample 1",
             "Sample 2",
             "Sample 3",
-            "Sample 4",
-            "Sample 5",
         ]
 
         if initial_user:
@@ -54,7 +52,7 @@ def create_manage_users_tab():
 
                 # Set up initial audio components
                 if samples:
-                    for i in range(min(5, len(samples))):
+                    for i in range(min(3, len(samples))):
                         sample = samples[i]
                         if sample["audio_file_path"] and os.path.exists(
                             sample["audio_file_path"]
@@ -73,7 +71,7 @@ def create_manage_users_tab():
             value=initial_info,
         )
 
-        # Container for audio samples (supporting up to 5 samples)
+        # Container for audio samples (supporting up to 3 samples)
         with gr.Group():
             audio1 = gr.Audio(
                 label=initial_audio_labels[0],
@@ -93,18 +91,6 @@ def create_manage_users_tab():
                 visible=initial_audio_visible[2],
                 interactive=False,
             )
-            audio4 = gr.Audio(
-                label=initial_audio_labels[3],
-                value=initial_audio_values[3],
-                visible=initial_audio_visible[3],
-                interactive=False,
-            )
-            audio5 = gr.Audio(
-                label=initial_audio_labels[4],
-                value=initial_audio_values[4],
-                visible=initial_audio_visible[4],
-                interactive=False,
-            )
 
         delete_btn = gr.Button("🗑️ Delete User", variant="stop")
 
@@ -115,11 +101,9 @@ def create_manage_users_tab():
             return gr.Dropdown(choices=users)
 
         def view_user_details(username):
-            # Default outputs: json_info + 5 audio components
+            # Default outputs: json_info + 3 audio components
             default_outputs = [
                 "",
-                gr.Audio(visible=False),
-                gr.Audio(visible=False),
                 gr.Audio(visible=False),
                 gr.Audio(visible=False),
                 gr.Audio(visible=False),
@@ -145,11 +129,11 @@ def create_manage_users_tab():
 
             json_info = json.dumps(display_data, indent=2)
 
-            # Prepare audio components (up to 5)
+            # Prepare audio components (up to 3)
             audio_outputs = [json_info]
 
             if samples:
-                for i in range(5):
+                for i in range(3):
                     if i < len(samples):
                         sample = samples[i]
                         if sample["audio_file_path"] and os.path.exists(
@@ -170,7 +154,7 @@ def create_manage_users_tab():
                         audio_outputs.append(gr.Audio(visible=False))
             else:
                 # No samples, hide all audio components
-                for i in range(5):
+                for i in range(3):
                     audio_outputs.append(gr.Audio(visible=False))
 
             return audio_outputs
@@ -181,8 +165,6 @@ def create_manage_users_tab():
                     "⚠️ Please select a user",
                     gr.Dropdown(choices=list_users()),
                     "",
-                    gr.Audio(visible=False),
-                    gr.Audio(visible=False),
                     gr.Audio(visible=False),
                     gr.Audio(visible=False),
                     gr.Audio(visible=False),
@@ -198,16 +180,12 @@ def create_manage_users_tab():
                     gr.Audio(visible=False),
                     gr.Audio(visible=False),
                     gr.Audio(visible=False),
-                    gr.Audio(visible=False),
-                    gr.Audio(visible=False),
                 )
             else:
                 return (
                     f"❌ Failed to delete user '{username}'",
                     gr.Dropdown(choices=list_users()),
                     "",
-                    gr.Audio(visible=False),
-                    gr.Audio(visible=False),
                     gr.Audio(visible=False),
                     gr.Audio(visible=False),
                     gr.Audio(visible=False),
@@ -219,7 +197,7 @@ def create_manage_users_tab():
         user_dropdown.change(
             view_user_details,
             inputs=[user_dropdown],
-            outputs=[user_info_display, audio1, audio2, audio3, audio4, audio5],
+            outputs=[user_info_display, audio1, audio2, audio3],
         )
 
         delete_btn.click(
@@ -232,7 +210,5 @@ def create_manage_users_tab():
                 audio1,
                 audio2,
                 audio3,
-                audio4,
-                audio5,
             ],
         )
