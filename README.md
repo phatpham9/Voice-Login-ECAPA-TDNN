@@ -9,6 +9,8 @@ app_file: app.py
 pinned: true
 license: mit
 short_description: A text-independent speaker verification system.
+thumbnail: >-
+  https://cdn-uploads.huggingface.co/production/uploads/677f2b5d19fb7f8c451e56e6/c5u7Lz_eGYRZeCDFem6v4.png
 ---
 
 # 🔐 Voice Login with ECAPA-TDNN
