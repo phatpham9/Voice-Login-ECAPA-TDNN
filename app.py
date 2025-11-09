@@ -8,7 +8,6 @@ from src.ui_login import create_login_tab
 from src.ui_enroll import create_enroll_tab
 from src.ui_manage import create_manage_users_tab
 from src.ui_statistics import create_statistics_tab
-from src.ui_metrics import create_performance_metrics_tab
 
 
 # ------------------------------------
@@ -23,7 +22,6 @@ with gr.Blocks() as demo:
     create_enroll_tab()
     create_manage_users_tab()
     create_statistics_tab()
-    create_performance_metrics_tab()
 
 
 if __name__ == "__main__":

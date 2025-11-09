@@ -10,7 +10,7 @@ from src.database import list_users, get_user_info, delete_user, get_user_sample
 
 def create_manage_users_tab():
     """Create the Manage Users tab UI"""
-    with gr.Tab("Manage Users"):
+    with gr.Tab("Manage"):
         gr.Markdown("### 👥 User Management")
 
         # Get initial user list and first user

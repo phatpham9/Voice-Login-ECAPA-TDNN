@@ -24,7 +24,6 @@ This system extracts unique voice characteristics (192-dimensional embeddings) f
 **Key Capabilities:**
 - Voice-based user enrollment with multi-sample support
 - Real-time speaker verification and authentication
-- Performance metrics and analytics dashboard
 - SQLite database with full audit trail
 - Interactive web interface powered by Gradio
 
@@ -38,28 +37,17 @@ This system extracts unique voice characteristics (192-dimensional embeddings) f
 - **Smart Audio Processing**: Automatic normalization (3-15 seconds) with quality feedback
 - **Adjustable Threshold**: Configurable similarity threshold (default: 0.80) for security vs. usability balance
 
-### 📊 Performance Analytics
-- **FAR/FRR Analysis**: False Acceptance and False Rejection Rate calculations
-- **EER Calculation**: Automatic Equal Error Rate determination for optimal threshold tuning
-- **ROC Curve**: Receiver Operating Characteristic with AUC scoring
-- **DET Curve**: Detection Error Tradeoff visualization with log-scale plots
-- **Score Distributions**: Histograms comparing genuine vs. impostor scores
-- **Confusion Matrix**: Detailed breakdown of authentication results (TP/TN/FP/FN)
-- **Interactive Threshold Testing**: Real-time metric updates as you adjust thresholds
-- **Smart Recommendations**: Data-driven suggestions for system optimization
-
 ### 🗄️ Data Management
 - **SQLite Database**: Robust storage with ACID properties and transaction support
 - **Complete Audit Trail**: Logs every authentication attempt with timestamp and score
 - **User Management**: Easy interface to view, update, and delete enrolled users
-- **Statistics Dashboard**: System-wide metrics and recent activity monitoring
+- **Statistics Dashboard**: System-wide statistics and recent activity monitoring
 - **Auto-Migration**: Seamless upgrade from legacy JSON format
 
 ### 🎨 User Interface
 - **Gradio Web Interface**: Clean, intuitive interface accessible via browser
 - **Enrollment Tab**: Step-by-step voice sample collection with guided prompts
 - **Login Tab**: Quick authentication with real-time feedback
-- **Metrics Tab**: Interactive performance dashboard with charts and analysis
 - **Management Tab**: User administration and system statistics
 
 ## 🚀 Quick Start
@@ -84,13 +72,17 @@ pip install -r requirements.txt
 **Production Mode:**
 ```bash
 uv run app.py
-# or: python app.py
+
+# Or
+python app.py
 ```
 
 **Development Mode (auto-reload on code changes):**
 ```bash
 uv run gradio app.py
-# or: gradio app.py
+
+# Or
+gradio app.py
 ```
 
 The Gradio interface will launch in your browser at `http://localhost:7860`
@@ -101,8 +93,6 @@ The Gradio interface will launch in your browser at `http://localhost:7860`
 - **PyTorch**: 2.0.0 - 2.4.x
 - **TorchAudio**: 2.0.0 - 2.4.x
 - Gradio, SpeechBrain, NumPy, SoundFile
-- Plotly 5.0+ (for metrics dashboard)
-- SciPy 1.9+ (for EER calculation)
 
 See `requirements.txt` for complete dependencies.
 
@@ -133,21 +123,7 @@ See `requirements.txt` for complete dependencies.
 
 The system compares your voice against all enrolled samples and uses the best match score.
 
-### Performance Analytics
-
-Access the **Performance Metrics** tab to analyze system performance:
-
-**Available Metrics:**
-- **FAR/FRR**: False Acceptance and False Rejection Rates
-- **EER**: Equal Error Rate (optimal threshold point)
-- **ROC Curve**: True Positive vs False Positive rate
-- **DET Curve**: Detection Error Tradeoff visualization
-- **Score Distribution**: Genuine vs impostor score analysis
-- **Confusion Matrix**: Detailed classification breakdown
-
-**Requirements:**
-- Minimum 10 genuine + 10 impostor attempts for meaningful analysis
-- Recommended: 20+ attempts of each type
+- Retry enrollment with longer audio samples
 
 ### Threshold Tuning
 
@@ -155,23 +131,19 @@ Access the **Performance Metrics** tab to analyze system performance:
 - **0.80** (default): Balanced security and convenience
 - **0.65-0.75**: More permissive, lower security
 
-Use the Performance Metrics tab to find the optimal threshold for your use case.
-
 ## 🏗️ Project Structure
 
 ```
 Voice-Login-ECAPA-TDNN/
-├── app.py                   # Main application entry point (30 lines)
+├── app.py                   # Main application entry point
 ├── src/                     # Source code modules
 │   ├── __init__.py          # Package initialization
 │   ├── core.py              # Core utilities (model, audio processing, embeddings)
 │   ├── database.py          # SQLite database operations
-│   ├── metrics.py           # Performance analysis & visualization
 │   ├── ui_login.py          # Login tab UI
 │   ├── ui_enroll.py         # Enrollment tab UI
 │   ├── ui_manage.py         # User management tab UI
-│   ├── ui_statistics.py     # Statistics tab UI
-│   └── ui_metrics.py        # Performance metrics tab UI
+│   └── ui_statistics.py     # Statistics tab UI
 ├── requirements.txt         # Python dependencies
 ├── enrollment_texts.json    # Sample enrollment prompts
 ├── voice_auth.db            # SQLite database (auto-created)
@@ -183,7 +155,6 @@ Voice-Login-ECAPA-TDNN/
 - **app.py**: Orchestrates all UI tabs and launches the Gradio interface
 - **src/core.py**: ECAPA-TDNN model loading, audio processing, embedding extraction
 - **src/database.py**: SQLite operations, user management, authentication logging
-- **src/metrics.py**: FAR/FRR/EER calculations, ROC/DET curves, visualizations
 - **src/ui_*.py**: Individual UI tabs with their respective business logic
 
 ## 🔬 Technical Details
