@@ -3,9 +3,8 @@ title: Voice Login with ECAPA-TDNN
 emoji: 📚
 colorFrom: gray
 colorTo: purple
-sdk: gradio
-sdk_version: 5.49.1
-app_file: app.py
+sdk: docker
+app_port: 7860
 pinned: true
 license: mit
 short_description: A text-independent speaker verification system.
