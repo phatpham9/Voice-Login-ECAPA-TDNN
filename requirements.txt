@@ -1,5 +1,5 @@
 gradio==4.16.0
-speechbrain==1.0.2
+speechbrain==1.0.3
 torch==2.4.1
 torchaudio==2.4.1
 numpy==1.26.4
