@@ -1,9 +1,10 @@
 import torch
 import torchaudio
-import librosa
 import numpy as np
 import gradio as gr
 import warnings
+import json
+import random
 from speechbrain.inference.speaker import EncoderClassifier
 from database import (
     save_multiple_embeddings,
@@ -15,10 +16,6 @@ from database import (
     get_database_stats,
     get_auth_history,
 )
-
-# Suppress PySoundFile and librosa warnings for cleaner output
-warnings.filterwarnings("ignore", category=UserWarning, module="librosa")
-warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
 
 
 # ------------------------------------
@@ -40,8 +37,42 @@ model = EncoderClassifier.from_hparams(
 
 
 # ------------------------------------
+# Initialize Enrollment Texts
+# ------------------------------------
+def load_enrollment_texts():
+    """Load enrollment texts from JSON file"""
+    try:
+        with open("enrollment_texts.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("voice_enroll_texts", [])
+    except FileNotFoundError:
+        print("⚠️ enrollment_texts.json not found. Using empty list.")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"⚠️ Error parsing enrollment_texts.json: {e}")
+        return []
+
+
+# Load enrollment texts from JSON file
+ENROLLMENT_TEXTS = load_enrollment_texts()
+if ENROLLMENT_TEXTS:
+    print(f"📝 Loaded {len(ENROLLMENT_TEXTS)} enrollment texts from JSON file")
+
+
+# ------------------------------------
 # Audio utilities
 # ------------------------------------
+def load_audio_file(filepath: str):
+    """Load audio file using torchaudio and return (sr, wav_np)"""
+    wav, sr = torchaudio.load(filepath)
+    # Convert to mono if stereo
+    if wav.shape[0] > 1:
+        wav = wav.mean(dim=0, keepdim=True)
+    # Convert to numpy array
+    wav_np = wav.squeeze(0).numpy()
+    return int(sr), wav_np
+
+
 def to_16k_mono(sr: int, wav_np: np.ndarray) -> torch.Tensor:
     """Gradio audio input -> torch tensor [1, T] mono 16k"""
     if wav_np.ndim == 2:
@@ -116,6 +147,13 @@ def cosine_similarity(a, b):
 # ------------------------------------
 
 
+def get_login_text():
+    """Get a random text for login"""
+    if ENROLLMENT_TEXTS:
+        return random.choice(ENROLLMENT_TEXTS)
+    return "Please record your voice."
+
+
 def login(username, audio, threshold):
     if not username:
         return "⚠️ Please enter a username.", None
@@ -125,8 +163,8 @@ def login(username, audio, threshold):
     # Handle both filepath (string) and tuple (sr, wav_np) formats
     if isinstance(audio, str):
         print(f"Audio received as filepath: {audio}")
-        # Use librosa to load audio (supports various formats including m4a)
-        wav_np, sr = librosa.load(audio, sr=None, mono=True)
+        # Use torchaudio to load audio (supports various formats)
+        sr, wav_np = load_audio_file(audio)
         audio_tuple = (sr, wav_np)
     else:
         sr, wav_np = audio
@@ -172,9 +210,24 @@ def login(username, audio, threshold):
         return f"❌ DENIED — score={best_score:.3f} < threshold={threshold:.2f}{warning_msg}"
 
 
+def get_enroll_texts():
+    """Get 3 random texts for enrollment"""
+    if ENROLLMENT_TEXTS and len(ENROLLMENT_TEXTS) >= 3:
+        texts = random.sample(ENROLLMENT_TEXTS, 3)
+        return texts[0], texts[1], texts[2]
+    elif ENROLLMENT_TEXTS:
+        # If less than 3 texts available, use what we have and pad
+        texts = ENROLLMENT_TEXTS.copy()
+        while len(texts) < 3:
+            texts.append("")
+        return texts[0], texts[1], texts[2]
+    else:
+        return "", "", ""
+
+
 def enroll(username, audio1, audio2, audio3):
     if not username:
-        return "⚠️ Please enter a username.", None
+        return "⚠️ Please enter a username.", None, None, None, None
 
     # Collect all provided audio samples
     audio_samples = []
@@ -183,7 +236,7 @@ def enroll(username, audio1, audio2, audio3):
             audio_samples.append((i, audio))
 
     if len(audio_samples) == 0:
-        return "⚠️ Please record at least one voice sample.", None
+        return "⚠️ Please record at least one voice sample.", None, None, None, None
 
     # Extract embeddings from all samples
     embeddings = []
@@ -193,7 +246,8 @@ def enroll(username, audio1, audio2, audio3):
         # Handle both filepath (string) and tuple (sr, wav_np) formats
         if isinstance(audio, str):
             print(f"Sample {idx}: Audio received as filepath: {audio}")
-            wav_np, sr = librosa.load(audio, sr=None, mono=True)
+            # Use torchaudio to load audio (supports various formats)
+            sr, wav_np = load_audio_file(audio)
             audio_tuple = (sr, wav_np)
         else:
             sr, wav_np = audio
@@ -225,9 +279,16 @@ def enroll(username, audio1, audio2, audio3):
         warning_msg = f"\n\n⚠️ Warning: Short audio detected - {short_list}. For better verification accuracy, consider re-enrolling with 3-5+ seconds of speech per sample."
 
     users_list = get_enrolled_users()
+
+    # Get new random texts for next enrollment
+    text1, text2, text3 = get_enroll_texts()
+
     return (
         f"✅ Enrolled '{username}' with {len(embeddings)} sample(s) — {embeddings[0].shape[-1]}D embeddings stored separately{warning_msg}",
         users_list,
+        text1,
+        text2,
+        text3,
     )
 
 
@@ -249,42 +310,97 @@ with gr.Blocks() as demo:
 
     with gr.Tab("Login"):
         u2 = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
+
+        gr.Markdown("### 📖 Please read the following text:")
+        login_text_display = gr.Textbox(
+            label="Text to Read",
+            value=get_login_text(),
+            lines=4,
+            interactive=False,
+            elem_id="login_text",
+        )
+
+        with gr.Row():
+            refresh_login_text_btn = gr.Button("🔄 Get New Text", size="sm")
+
         a2 = gr.Audio(
             sources=["microphone", "upload"],
             type="filepath",
-            label="Record 3-10s of speech",
+            label="Record yourself reading the text above (3-10s)",
         )
         th = gr.Slider(
             0.50, 0.98, value=DEFAULT_THRESHOLD, step=0.01, label="Threshold (cosine)"
         )
         out2 = gr.Textbox(label="Result")
+
         gr.Button("Login").click(login, inputs=[u2, a2, th], outputs=[out2])
+        refresh_login_text_btn.click(
+            get_login_text, inputs=[], outputs=[login_text_display]
+        )
 
     with gr.Tab("Enroll"):
         u = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
-        gr.Markdown("### Record 1-3 voice samples for better accuracy")
-        gr.Markdown(
-            "*Tip: Use similar length recordings (3-10s each). Avoid very short clips with lots of padding.*"
+        gr.Markdown("### 📖 Read the texts below for each sample")
+        gr.Markdown("*Tip: Record yourself reading each text clearly (3-10s each).*")
+
+        # Get initial random texts
+        initial_text1, initial_text2, initial_text3 = get_enroll_texts()
+
+        gr.Markdown("#### Sample 1 (Required)")
+        text1_display = gr.Textbox(
+            label="Text to Read for Sample 1",
+            value=initial_text1,
+            lines=3,
+            interactive=False,
         )
         a1 = gr.Audio(
             sources=["microphone", "upload"],
             type="filepath",
-            label="Sample 1 (Required) — Record 3-10s",
+            label="Record Sample 1",
+        )
+
+        gr.Markdown("#### Sample 2 (Optional)")
+        text2_display = gr.Textbox(
+            label="Text to Read for Sample 2",
+            value=initial_text2,
+            lines=3,
+            interactive=False,
         )
         a2 = gr.Audio(
             sources=["microphone", "upload"],
             type="filepath",
-            label="Sample 2 (Optional) — Record 3-10s",
+            label="Record Sample 2",
+        )
+
+        gr.Markdown("#### Sample 3 (Optional)")
+        text3_display = gr.Textbox(
+            label="Text to Read for Sample 3",
+            value=initial_text3,
+            lines=3,
+            interactive=False,
         )
         a3 = gr.Audio(
             sources=["microphone", "upload"],
             type="filepath",
-            label="Sample 3 (Optional) — Record 3-10s",
+            label="Record Sample 3",
         )
+
+        with gr.Row():
+            refresh_enroll_texts_btn = gr.Button("🔄 Get New Texts", size="sm")
+
         out = gr.Textbox(label="Result")
         enrolled_list = gr.Markdown(value=get_enrolled_users())
+
         gr.Button("Enroll").click(
-            enroll, inputs=[u, a1, a2, a3], outputs=[out, enrolled_list]
+            enroll,
+            inputs=[u, a1, a2, a3],
+            outputs=[out, enrolled_list, text1_display, text2_display, text3_display],
+        )
+
+        refresh_enroll_texts_btn.click(
+            get_enroll_texts,
+            inputs=[],
+            outputs=[text1_display, text2_display, text3_display],
         )
 
     with gr.Tab("Manage Users"):

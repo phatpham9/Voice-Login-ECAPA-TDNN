@@ -4,7 +4,6 @@ torch>=2.0.0,<2.5.0
 torchaudio>=2.0.0,<2.5.0
 numpy
 soundfile
-librosa
 requests
 huggingface-hub<1.0.0
 typer
