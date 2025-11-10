@@ -28,12 +28,24 @@ This system extracts unique voice characteristics (192-dimensional embeddings) f
 
 ## ✨ Features
 
-### 🎤 Voice Login
-- **Text-Independent**: Works with any spoken content - no fixed passphrases needed
-- **Multi-Language Support**: Compatible with any language (Vietnamese, English, etc.)
-- **Multiple Samples**: Enroll with 1-3 voice samples per user for improved accuracy
-- **Best Match Algorithm**: Compares against all stored samples and uses the highest similarity score
-- **Smart Audio Processing**: Automatic normalization (3-15 seconds) with quality feedback
+### 🎤 Voice Authentication
+- **Advanced Enrollment Strategy**: 
+  - 3 mandatory voice samples (5-10 seconds each) for robust profile creation
+  - Strict quality enforcement with automatic rejection of short samples
+  - Vietnamese text verification prompts for anti-spoofing
+- **Sophisticated Scoring System**:
+  - Weighted fusion: 60% top-2 average + 40% centroid similarity
+  - Dynamic centroid computed on-the-fly from all stored samples
+  - Detailed score breakdown showing individual sample contributions
+- **Audio Quality Diagnostics**:
+  - Real-time analysis of amplitude, SNR, clipping, and noise floor
+  - Actionable feedback to improve recording quality
+  - Context-aware suggestions for enrollment and login
+- **Anti-Spoofing Protection**:
+  - Text verification using Whisper ASR (Vietnamese support)
+  - Word Error Rate (WER) validation (threshold: 0.50)
+  - Early rejection of replay attacks and synthetic voices
+- **Multi-Language Support**: Compatible with Vietnamese, English, and other languages
 - **Adjustable Threshold**: Configurable similarity threshold (default: 0.80) for security vs. usability balance
 
 ### 🗄️ Data Management
@@ -91,7 +103,12 @@ The Gradio interface will launch in your browser at `http://localhost:7860`
 - **Python**: 3.8 or higher
 - **PyTorch**: 2.0.0 - 2.4.x
 - **TorchAudio**: 2.0.0 - 2.4.x
-- Gradio, SpeechBrain, NumPy, SoundFile
+- **Core Libraries**: 
+  - SpeechBrain 1.0.3 (ECAPA-TDNN speaker verification)
+  - OpenAI Whisper (ASR for text verification)
+  - jiwer 4.0.0 (Word Error Rate calculation)
+  - Gradio 4.16.0 (Web interface)
+  - NumPy, SoundFile (Audio processing)
 
 See `requirements.txt` for complete dependencies.
 
@@ -101,28 +118,50 @@ See `requirements.txt` for complete dependencies.
 
 1. Open the **Enroll** tab
 2. Enter a unique username
-3. Record 1-3 voice samples (3-10 seconds each):
-   - Sample 1 (required): Natural speech, minimum 3 seconds
-   - Samples 2-3 (optional): Additional samples improve accuracy
+3. Record **3 mandatory voice samples** (5-10 seconds each):
+   - Read the displayed Vietnamese text prompt for each sample
+   - All 3 samples must pass text verification (WER < 0.50)
+   - Each sample must be at least 5 seconds long
+   - System automatically validates audio quality
 4. Click **Enroll** to register the voice profile
 
+**Requirements:**
+- **Minimum length**: 5 seconds per sample (strictly enforced)
+- **Text verification**: Must read displayed prompts accurately
+- **All samples mandatory**: Cannot enroll with fewer than 3 samples
+- **Quality standards**: Clear audio with minimal noise and clipping
+
 **Tips:**
-- Speak naturally for 5+ seconds per sample
-- Use different phrases for each sample
-- Record in a quiet environment
-- Each sample is stored separately for better matching
+- Read the Vietnamese text prompts clearly and naturally
+- Record in a quiet environment with good microphone
+- Speak at normal volume (avoid shouting or whispering)
+- Wait for text prompt to refresh between samples
+- Each sample is stored separately for robust matching
 
 ### Authentication
 
 1. Open the **Login** tab
 2. Enter your username
-3. Record your voice (3-10 seconds of speech)
-4. Optionally adjust the similarity threshold (default: 0.80)
-5. Click **Login** to verify
+3. Read the displayed Vietnamese text prompt (refreshable)
+4. Record your voice (5+ seconds recommended)
+5. Optionally adjust the similarity threshold (default: 0.80)
+6. Click **Login** to verify
 
-The system compares your voice against all enrolled samples and uses the best match score.
+**Two-Stage Verification:**
+1. **Text Verification** (Anti-Spoofing): 
+   - Whisper ASR transcribes your speech
+   - WER calculated against expected text
+   - Rejects if WER > 0.50 (likely replay attack or wrong text)
+2. **Speaker Verification** (if text passed):
+   - Compares voice against all enrolled samples
+   - Uses weighted scoring: 60% top-2 average + 40% centroid
+   - Shows detailed score breakdown with best match indicator
 
-- Retry enrollment with longer audio samples
+**Result Information:**
+- Individual similarity scores for each stored sample
+- Weighted scoring strategy breakdown
+- Text verification details (expected, detected, WER)
+- Audio quality diagnostics and improvement suggestions
 
 ### Threshold Tuning
 
@@ -147,59 +186,131 @@ Voice-Login-ECAPA-TDNN/
 ├── enrollment_texts.json    # Sample enrollment prompts
 ├── voice_auth.db            # SQLite database (auto-created)
 ├── ecapa/                   # Pre-trained model files (auto-downloaded)
+├── whisper/                 # Whisper model files (auto-downloaded)
 └── README.md                # This file
 ```
 
 **Module Overview:**
 - **app.py**: Orchestrates all UI tabs and launches the Gradio interface
-- **src/core.py**: ECAPA-TDNN model loading, audio processing, embedding extraction
+- **src/core.py**: ECAPA-TDNN model loading, audio processing, embedding extraction, text verification
 - **src/database.py**: SQLite operations, user management, authentication logging
 - **src/ui_*.py**: Individual UI tabs with their respective business logic
+- **enrollment_texts.json**: Vietnamese text prompts for anti-spoofing
+
+## ⚙️ Configuration
+
+Key parameters in `src/core.py`:
+
+```python
+# Enrollment Requirements
+REQUIRED_ENROLLMENT_SAMPLES = 3    # Mandatory 3 samples
+MIN_AUDIO_LENGTH_SEC = 5.0         # Minimum 5 seconds per sample
+
+# Scoring Strategy (Weighted Fusion)
+TOP_K_SAMPLES = 2                  # Use top 2 scores for averaging
+SCORE_WEIGHT_TOP_K = 0.6          # 60% weight for top-k average
+SCORE_WEIGHT_CENTROID = 0.4       # 40% weight for centroid similarity
+
+# Anti-Spoofing
+ENABLE_TEXT_VERIFICATION = True    # Enable/disable text verification
+WER_THRESHOLD = 0.5                # Maximum Word Error Rate (50%)
+
+# Authentication
+DEFAULT_THRESHOLD = 0.80           # Default similarity threshold
+```
 
 ## 🔬 Technical Details
 
 ### Model Architecture
-- **Model**: ECAPA-TDNN (SpeechBrain pre-trained)
-- **Source**: `speechbrain/spkrec-ecapa-voxceleb`
-- **Embedding Size**: 192 dimensions
-- **Training Data**: VoxCeleb (1M+ utterances, 7000+ speakers)
-- **Similarity Metric**: Cosine similarity
+- **Speaker Verification**: ECAPA-TDNN (SpeechBrain pre-trained)
+  - Source: `speechbrain/spkrec-ecapa-voxceleb`
+  - Embedding Size: 192 dimensions
+  - Training Data: VoxCeleb (1M+ utterances, 7000+ speakers)
+- **Speech Recognition**: Whisper-tiny (OpenAI)
+  - Language: Vietnamese (`vi`)
+  - Purpose: Anti-spoofing text verification
+  - WER Threshold: 0.50
 
-### Audio Processing
+### Audio Processing Pipeline
 1. Convert to mono (if stereo)
 2. Resample to 16kHz
-3. Normalize length (3-15 seconds)
-4. Extract 192D embedding via ECAPA-TDNN
-5. Compare using cosine similarity
+3. Quality analysis (amplitude, SNR, clipping, noise)
+4. Text verification via Whisper ASR (if enabled)
+5. Extract 192D embedding via ECAPA-TDNN
+6. Compute weighted similarity score
 
-### Multi-Sample Strategy
-- Each enrollment sample stored separately (not averaged)
-- During verification, compares against all stored embeddings
-- Uses maximum similarity score for robust matching
-- More resilient to recording condition variations
+### Enrollment Strategy
+- **Mandatory samples**: Exactly 3 samples required
+- **Minimum length**: 5 seconds per sample (strictly enforced)
+- **Storage**: Each sample stored separately as 192D embedding (float32)
+- **Text verification**: All samples must pass WER < 0.50 check
+- **No averaging**: Preserves individual sample characteristics
+
+### Scoring Strategy (Weighted Fusion)
+- **Top-K Average** (60% weight): Average of top 2 similarity scores
+  - Resilient to outliers and recording variations
+  - Emphasizes best matches
+- **Centroid Similarity** (40% weight): Compare against profile centroid
+  - Centroid computed on-the-fly from all stored embeddings
+  - Represents "average" voice characteristics
+  - Not stored in database
+- **Final Score**: `0.6 × top_k_avg + 0.4 × centroid_sim`
+- **Similarity Metric**: Cosine similarity (range: -1 to 1, typically 0.5-1.0)
 
 ## 💡 Best Practices
 
-**For Better Accuracy:**
-- Record 5-10 seconds of natural speech per sample
-- Use 2-3 enrollment samples per user
-- Maintain consistent recording conditions
+**For Better Enrollment:**
+- Read Vietnamese text prompts clearly and naturally
+- Record 7-10 seconds per sample (exceeds 5s minimum)
+- Maintain consistent recording conditions across all 3 samples
 - Ensure quiet environment with good microphone
+- Wait for quality diagnostics before proceeding
+- If text verification fails, re-record and read prompt carefully
+
+**For Better Login:**
+- Read displayed text prompt accurately (check WER feedback)
+- Speak naturally, similar to enrollment conditions
+- Ensure minimum 5 seconds of speech
+- Review diagnostic feedback if score is low
+- Check text verification details if authentication fails
 
 **Troubleshooting:**
-- Low scores? Check audio length (3+ seconds) and quality
-- High false acceptance? Increase threshold (0.85-0.90)
-- High false rejection? Lower threshold (0.70-0.75) or re-enroll with better samples
+- **Text verification fails**: Read prompt more carefully, check microphone clarity
+- **Low similarity scores**: Check audio quality diagnostics, ensure 5+ seconds
+- **High false acceptance**: Increase threshold (0.85-0.90)
+- **High false rejection**: Lower threshold (0.70-0.75) or re-enroll with better samples
+- **Replay attack detected**: Text verification working correctly (expected behavior)
 
 ## 🎓 Academic Context
 
 Developed as part of the **Advanced Image Processing** course at Saigon University (SGU), demonstrating practical applications of deep learning in biometric authentication and audio signal processing.
 
+## 🔐 Security Features
+
+### Anti-Spoofing Protection
+- **Text Verification**: Random Vietnamese prompts prevent replay attacks
+- **Whisper ASR**: Transcribes speech and validates against expected text
+- **WER Threshold**: 0.50 (50%+ accuracy required)
+- **Early Rejection**: Text verification performed before speaker verification
+- **Dynamic Prompts**: Refreshable texts prevent pre-recorded attacks
+
+### Quality Assurance
+- **Minimum Length**: 5 seconds enforced (prevents truncated attacks)
+- **Audio Quality Analysis**: Real-time SNR, clipping, and noise detection
+- **Diagnostic Feedback**: Actionable suggestions for improvement
+- **Strict Enrollment**: All 3 samples must pass quality and text checks
+
+### Database Security
+- **SQLite with ACID**: Atomic transactions and data integrity
+- **Audit Trail**: Complete logging of all authentication attempts
+- **Embedding Storage**: Raw embeddings stored (not audio data)
+
 ## 📚 References
 
 - **ECAPA-TDNN Paper**: [Arxiv 2005.07143](https://arxiv.org/abs/2005.07143)
 - **SpeechBrain**: [Documentation](https://speechbrain.readthedocs.io/)
-- **Model**: [HuggingFace Model Card](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb)
+- **ECAPA Model**: [HuggingFace Model Card](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb)
+- **Whisper ASR**: [OpenAI Whisper](https://github.com/openai/whisper)
 - **VoxCeleb Dataset**: [Official Website](https://www.robots.ox.ac.uk/~vgg/data/voxceleb/)
 
 ## 📝 License
@@ -208,4 +319,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Note**: This is an educational project. For production deployment, implement additional security measures including liveness detection, encrypted storage, and multi-factor authentication.
+**Note**: This is an educational project demonstrating advanced voice authentication techniques. For production deployment, consider additional security measures including liveness detection, encrypted storage, multi-factor authentication, and regular security audits.
