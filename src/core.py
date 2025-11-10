@@ -18,6 +18,11 @@ MIN_AUDIO_LENGTH_SEC = 5.0  # Increased from 3.0 for better quality
 REQUIRED_ENROLLMENT_SAMPLES = 3  # Mandatory number of samples for enrollment
 MAX_AUDIO_LENGTH_SEC = 15.0
 
+# Score fusion configuration
+TOP_K_SAMPLES = 2  # Use top-2 of 3 samples for averaging
+SCORE_WEIGHT_TOP_K = 0.6  # 60% weight on top-k average
+SCORE_WEIGHT_CENTROID = 0.4  # 40% weight on centroid
+
 
 # ------------------------------------
 # Load ECAPA-TDNN pretrained model
@@ -153,6 +158,64 @@ def compute_centroid(embeddings: list) -> np.ndarray:
     centroid = centroid / (np.linalg.norm(centroid) + 1e-9)
 
     return centroid.astype("float32")
+
+
+def compute_weighted_score(
+    sample_scores: list, centroid_score: float, top_k: int = TOP_K_SAMPLES
+) -> dict:
+    """
+    Compute final verification score using weighted average of top-k and centroid.
+
+    Args:
+        sample_scores: List of similarity scores from individual samples
+        centroid_score: Similarity score from centroid
+        top_k: Number of top scores to average (default: 2)
+
+    Returns:
+        Dictionary with:
+        - final_score: Weighted average score
+        - top_k_avg: Average of top-k samples
+        - top_k_indices: Indices of top-k samples (1-indexed)
+        - best_match_score: Best individual sample score
+        - best_match_index: Index of best sample (1-indexed)
+        - centroid_score: Centroid similarity score
+        - strategy_breakdown: Human-readable explanation
+    """
+    # Sort scores and get top-k
+    sorted_indices = sorted(
+        range(len(sample_scores)), key=lambda i: sample_scores[i], reverse=True
+    )
+    top_k_indices = sorted_indices[:top_k]
+    top_k_scores = [sample_scores[i] for i in top_k_indices]
+    top_k_avg = float(np.mean(top_k_scores))
+
+    # Best match (for comparison)
+    best_match_idx = sorted_indices[0]
+    best_match_score = sample_scores[best_match_idx]
+
+    # Weighted final score
+    final_score = (
+        SCORE_WEIGHT_TOP_K * top_k_avg + SCORE_WEIGHT_CENTROID * centroid_score
+    )
+
+    # Create strategy breakdown
+    top_k_samples_str = ", ".join([f"#{i+1}" for i in sorted(top_k_indices)])
+    strategy_breakdown = (
+        f"Final score computed as:\n"
+        f"  • Top-{top_k} avg (samples {top_k_samples_str}): {top_k_avg:.3f} × {SCORE_WEIGHT_TOP_K:.1f} = {SCORE_WEIGHT_TOP_K * top_k_avg:.3f}\n"
+        f"  • Centroid (all samples): {centroid_score:.3f} × {SCORE_WEIGHT_CENTROID:.1f} = {SCORE_WEIGHT_CENTROID * centroid_score:.3f}\n"
+        f"  • Final: {final_score:.3f}"
+    )
+
+    return {
+        "final_score": final_score,
+        "top_k_avg": top_k_avg,
+        "top_k_indices": [i + 1 for i in sorted(top_k_indices)],  # 1-indexed
+        "best_match_score": best_match_score,
+        "best_match_index": best_match_idx + 1,  # 1-indexed
+        "centroid_score": centroid_score,
+        "strategy_breakdown": strategy_breakdown,
+    }
 
 
 def analyze_audio_quality(wav_np: np.ndarray, sr: int) -> dict:

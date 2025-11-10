@@ -13,6 +13,7 @@ from src.core import (
     extract_embedding,
     cosine_similarity,
     compute_centroid,
+    compute_weighted_score,
     analyze_audio_quality,
     generate_diagnostic_message,
 )
@@ -58,54 +59,73 @@ def login(username, audio, threshold):
     new_emb = extract_embedding(audio_tuple)
     print(f"New embedding shape: {new_emb.shape}, norm: {np.linalg.norm(new_emb):.3f}")
 
-    # Strategy 1: Compare against all stored embeddings and use the best (maximum) score
-    scores = []
+    # Compute similarity scores for all stored samples
+    sample_scores = []
     for i, stored_emb in enumerate(stored_embeddings):
         score = cosine_similarity(stored_emb, new_emb)
-        scores.append(score)
+        sample_scores.append(score)
         print(f"Similarity to stored sample {i+1}: {score:.4f}")
 
-    best_match_score = max(scores)
-    matched_sample = scores.index(best_match_score) + 1
-
-    # Strategy 2: Compute centroid on-the-fly and compare
+    # Compute centroid on-the-fly and compare
     centroid = compute_centroid(stored_embeddings)
     centroid_score = cosine_similarity(centroid, new_emb)
     print(f"Similarity to profile centroid: {centroid_score:.4f}")
 
-    # Final score: max(best_match, centroid_similarity)
-    final_score = max(best_match_score, centroid_score)
+    # Compute weighted score using top-k + centroid fusion
+    score_result = compute_weighted_score(sample_scores, centroid_score)
+    final_score = score_result["final_score"]
 
-    print(f"Best match score: {best_match_score:.4f}")
-    print(f"Centroid score: {centroid_score:.4f}")
-    print(f"Final score: {final_score:.4f}, Threshold: {threshold:.2f}")
+    print(f"\n{score_result['strategy_breakdown']}")
+    print(f"Threshold: {threshold:.2f}")
 
     # Log authentication attempt
     success = final_score >= threshold
-    log_authentication(username, success, final_score, threshold, matched_sample)
+    log_authentication(
+        username, success, final_score, threshold, score_result["best_match_index"]
+    )
 
+    # Build detailed result message
     if success:
-        strategy_used = (
-            "centroid"
-            if centroid_score > best_match_score
-            else f"sample {matched_sample}"
-        )
         result_msg = (
             f"✅ SUCCESS — score={final_score:.3f} ≥ threshold={threshold:.2f}\n\n"
-            f"• Best match: {best_match_score:.3f} (sample {matched_sample})\n"
-            f"• Centroid: {centroid_score:.3f}\n"
-            f"• Strategy used: {strategy_used}"
+            f"📊 Score Breakdown:\n"
         )
+
+        # Individual sample scores
+        for i, score in enumerate(sample_scores):
+            marker = "🏆" if i + 1 == score_result["best_match_index"] else "  "
+            in_topk = "✓" if (i + 1) in score_result["top_k_indices"] else " "
+            result_msg += f"{marker} Sample {i+1}: {score:.3f} [{in_topk}]\n"
+
+        result_msg += (
+            f"\n🎯 Verification Strategy:\n"
+            f"{score_result['strategy_breakdown']}\n"
+            f"\nLegend: [✓] = used in top-k, 🏆 = best match"
+        )
+
         # Add diagnostic info if there are issues (even on success)
         if diagnostic_msg:
             result_msg += diagnostic_msg
+
         return result_msg
     else:
         result_msg = (
             f"❌ DENIED — score={final_score:.3f} < threshold={threshold:.2f}\n\n"
-            f"• Best match: {best_match_score:.3f} (sample {matched_sample})\n"
-            f"• Centroid: {centroid_score:.3f}"
+            f"📊 Score Breakdown:\n"
         )
+
+        # Individual sample scores
+        for i, score in enumerate(sample_scores):
+            marker = "🏆" if i + 1 == score_result["best_match_index"] else "  "
+            in_topk = "✓" if (i + 1) in score_result["top_k_indices"] else " "
+            result_msg += f"{marker} Sample {i+1}: {score:.3f} [{in_topk}]\n"
+
+        result_msg += (
+            f"\n🎯 Verification Strategy:\n"
+            f"{score_result['strategy_breakdown']}\n"
+            f"\nLegend: [✓] = used in top-k, 🏆 = best match"
+        )
+
         # Always add diagnostic info on failure to help user troubleshoot
         if diagnostic_msg:
             result_msg += diagnostic_msg
@@ -117,6 +137,7 @@ def login(username, audio, threshold):
                 "• Speak in a quiet environment\n"
                 "• Consider re-enrolling if you continue to have issues"
             )
+
         return result_msg
 
 
