@@ -33,7 +33,6 @@ ENABLE_TEXT_VERIFICATION = True  # Enable/disable text verification
 # ------------------------------------
 # Load ECAPA-TDNN pretrained model
 # ------------------------------------
-print("Loading ECAPA-TDNN model...")
 model = EncoderClassifier.from_hparams(
     source="speechbrain/spkrec-ecapa-voxceleb",
     savedir="ecapa",
@@ -45,9 +44,8 @@ print("✅ ECAPA-TDNN model loaded")
 # ------------------------------------
 # Load Whisper model for ASR
 # ------------------------------------
-print("Loading Whisper model (tiny)...")
 whisper_model = whisper.load_model("tiny", download_root="whisper")
-print("✅ Whisper model loaded")
+print("✅ Whisper model (tiny) loaded")
 
 
 # ------------------------------------

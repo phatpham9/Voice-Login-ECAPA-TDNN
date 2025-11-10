@@ -130,8 +130,6 @@ def init_database():
         """
         )
 
-        print("✅ Database initialized successfully")
-
 
 def save_multiple_embeddings(
     username: str,
@@ -494,7 +492,3 @@ def get_database_stats() -> dict:
             ),
             "recent_attempts_24h": recent_attempts,
         }
-
-
-# Initialize database on module import
-init_database()

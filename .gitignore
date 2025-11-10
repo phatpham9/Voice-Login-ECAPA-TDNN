@@ -72,12 +72,12 @@ htmlcov/
 !ecapa/*.bin
 
 # Audio files (temporary recordings)
-*.wav
-*.mp3
-*.flac
-*.ogg
-!samples/*.wav
-!samples/*.mp3
+# *.wav
+# *.mp3
+# *.flac
+# *.ogg
+audio_samples/
+!seed_db/audio_samples/
 
 # MacOS
 .DS_Store
