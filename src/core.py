@@ -8,6 +8,8 @@ import torchaudio
 import numpy as np
 import json
 import whisper
+import webrtcvad
+import struct
 from jiwer import wer
 from speechbrain.inference.speaker import EncoderClassifier
 
@@ -125,15 +127,216 @@ def normalize_audio_length(
     return wav
 
 
+def apply_webrtc_vad(
+    wav_np: np.ndarray,
+    sr: int = 16000,
+    frame_duration_ms: int = 30,
+    aggressiveness: int = 2,
+    padding_duration_ms: int = 300,
+) -> np.ndarray:
+    """
+    Apply WebRTC VAD to extract speech-only segments and remove leading/trailing silence.
+
+    Args:
+        wav_np: Audio numpy array (float32, range -1.0 to 1.0)
+        sr: Sample rate (must be 8000, 16000, 32000, or 48000)
+        frame_duration_ms: Frame size in ms (10, 20, or 30)
+        aggressiveness: VAD aggressiveness mode (0-3, higher = more aggressive)
+            0 = Quality mode (most permissive, least aggressive)
+            1 = Low bitrate mode
+            2 = Aggressive mode (recommended for voice authentication)
+            3 = Very aggressive mode
+        padding_duration_ms: Amount of padding (ms) to add around speech segments
+
+    Returns:
+        Speech-only audio segments concatenated as float32 numpy array
+    """
+    # Validate sample rate
+    if sr not in [8000, 16000, 32000, 48000]:
+        raise ValueError(f"Sample rate must be 8000, 16000, 32000, or 48000. Got {sr}")
+
+    # Validate frame duration
+    if frame_duration_ms not in [10, 20, 30]:
+        raise ValueError(
+            f"Frame duration must be 10, 20, or 30 ms. Got {frame_duration_ms}"
+        )
+
+    vad = webrtcvad.Vad(aggressiveness)
+
+    # Convert float32 to int16 PCM (WebRTC VAD requirement)
+    if wav_np.dtype == np.float32 or wav_np.dtype == np.float64:
+        # Ensure values are in range [-1.0, 1.0]
+        wav_np = np.clip(wav_np, -1.0, 1.0)
+        wav_int16 = (wav_np * 32767).astype(np.int16)
+    elif wav_np.dtype == np.int16:
+        wav_int16 = wav_np
+    else:
+        # Convert other types to float32 first
+        wav_np = wav_np.astype(np.float32)
+        wav_np = np.clip(wav_np, -1.0, 1.0)
+        wav_int16 = (wav_np * 32767).astype(np.int16)
+
+    # Frame parameters
+    frame_length = int(sr * frame_duration_ms / 1000)
+    num_padding_frames = int(padding_duration_ms / frame_duration_ms)
+
+    # Split audio into frames
+    frames = []
+    for i in range(0, len(wav_int16), frame_length):
+        frame = wav_int16[i : i + frame_length]
+        if len(frame) == frame_length:  # Only process complete frames
+            frames.append(frame)
+
+    if not frames:
+        print("⚠️ VAD: No complete frames found, returning original audio")
+        return wav_np
+
+    # Apply VAD to each frame
+    voiced_flags = []
+    for frame in frames:
+        try:
+            # Convert frame to bytes for VAD
+            frame_bytes = struct.pack("%dh" % len(frame), *frame)
+            is_speech = vad.is_speech(frame_bytes, sr)
+            voiced_flags.append(is_speech)
+        except Exception as e:
+            print(f"⚠️ VAD frame processing error: {e}")
+            voiced_flags.append(True)  # Assume speech on error
+
+    # Find speech segments with padding
+    speech_frames = []
+    num_voiced = sum(voiced_flags)
+
+    if num_voiced == 0:
+        print("⚠️ VAD: No speech detected, returning original audio")
+        return wav_np
+
+    # Add padding around speech segments
+    for i, is_speech in enumerate(voiced_flags):
+        if is_speech:
+            # Add padding frames before and after
+            start_idx = max(0, i - num_padding_frames)
+            end_idx = min(len(frames), i + num_padding_frames + 1)
+            for j in range(start_idx, end_idx):
+                if j not in [idx for idx, frame in speech_frames]:  # Avoid duplicates
+                    speech_frames.append((j, frames[j]))
+
+    # Sort by index and extract frames
+    speech_frames.sort(key=lambda x: x[0])
+    speech_audio_int16 = np.concatenate([frame for _, frame in speech_frames])
+
+    # Convert back to float32
+    speech_audio_float32 = speech_audio_int16.astype(np.float32) / 32767.0
+
+    # Calculate statistics
+    original_duration = len(wav_np) / sr
+    trimmed_duration = len(speech_audio_float32) / sr
+    removed_duration = original_duration - trimmed_duration
+
+    print(
+        f"🎤 VAD: Removed {removed_duration:.2f}s of silence "
+        f"({removed_duration/original_duration*100:.1f}% of audio)"
+    )
+    print(
+        f"   Original: {original_duration:.2f}s → Speech-only: {trimmed_duration:.2f}s"
+    )
+
+    return speech_audio_float32
+
+
+def trim_silence_energy_based(
+    wav: torch.Tensor,
+    sr: int = 16000,
+    top_db: float = 30.0,
+    frame_length: int = 2048,
+    hop_length: int = 512,
+) -> torch.Tensor:
+    """
+    Remove leading and trailing silence based on energy threshold (fallback method).
+
+    Args:
+        wav: Audio tensor [1, T] or [T]
+        sr: Sample rate (default 16000)
+        top_db: Threshold in dB below peak to consider as silence
+        frame_length: Frame size for analysis
+        hop_length: Hop size between frames
+
+    Returns:
+        Trimmed audio tensor
+    """
+    wav_2d = wav.squeeze(0) if wav.ndim == 2 else wav
+
+    if wav_2d.shape[0] < frame_length:
+        return wav  # Too short to analyze
+
+    # Calculate energy with padding
+    frames = wav_2d.unfold(0, frame_length, hop_length)
+    energy = torch.sqrt(torch.mean(frames**2, dim=1))
+
+    # Convert to dB scale
+    energy_db = 20 * torch.log10(energy + 1e-10)
+    threshold = energy_db.max() - top_db
+
+    # Find first and last frames above threshold
+    above_threshold = energy_db > threshold
+    if not above_threshold.any():
+        return wav  # Keep original if all is silence
+
+    start_frame = above_threshold.nonzero()[0].item()
+    end_frame = above_threshold.nonzero()[-1].item() + 1
+
+    # Convert frame indices to sample indices
+    start_sample = start_frame * hop_length
+    end_sample = min(end_frame * hop_length + frame_length, wav_2d.shape[0])
+
+    trimmed = wav_2d[start_sample:end_sample]
+
+    # Calculate removed duration
+    original_duration = wav_2d.shape[0] / sr
+    trimmed_duration = trimmed.shape[0] / sr
+    removed_duration = original_duration - trimmed_duration
+
+    if removed_duration > 0.1:  # Only log if significant
+        print(
+            f"🎤 Energy-based trim: Removed {removed_duration:.2f}s of silence "
+            f"({removed_duration/original_duration*100:.1f}% of audio)"
+        )
+
+    return trimmed.unsqueeze(0) if wav.ndim == 2 else trimmed
+
+
 def extract_embedding(audio_tuple) -> np.ndarray:
     """
     Convert audio (sr, wav) to ECAPA-TDNN embedding (192d vector).
-    Audio is normalized to be within MIN_AUDIO_LENGTH_SEC and MAX_AUDIO_LENGTH_SEC.
+    Audio is preprocessed with VAD to remove silence and normalized to be
+    within MIN_AUDIO_LENGTH_SEC and MAX_AUDIO_LENGTH_SEC.
     """
     sr, wav_np = audio_tuple
+
+    # Step 1: Convert to 16kHz mono
     wav = to_16k_mono(sr, wav_np)
 
-    # Ensure audio is within reasonable bounds
+    # Step 2: Apply VAD to remove leading/trailing silence
+    # Convert tensor back to numpy for VAD processing
+    wav_np_16k = wav.squeeze(0).numpy() if wav.ndim == 2 else wav.numpy()
+
+    try:
+        # Use WebRTC VAD (aggressiveness=2 is recommended for voice authentication)
+        wav_np_vad = apply_webrtc_vad(
+            wav_np_16k,
+            sr=16000,
+            frame_duration_ms=30,
+            aggressiveness=2,
+            padding_duration_ms=300,
+        )
+        # Convert back to tensor
+        wav = torch.from_numpy(wav_np_vad).unsqueeze(0)
+    except Exception as e:
+        print(f"⚠️ VAD failed ({e}), falling back to energy-based trimming")
+        # Fallback to energy-based silence trimming
+        wav = trim_silence_energy_based(wav, sr=16000, top_db=30.0)
+
+    # Step 3: Ensure audio is within reasonable bounds (after VAD trimming)
     wav = normalize_audio_length(
         wav,
         min_length_sec=MIN_AUDIO_LENGTH_SEC,
@@ -141,6 +344,7 @@ def extract_embedding(audio_tuple) -> np.ndarray:
         sr=16000,
     )
 
+    # Step 4: Extract embedding
     emb = model.encode_batch(wav)  # tensor [1, 192]
     return emb.squeeze(0).detach().cpu().numpy().astype("float32")
 

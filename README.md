@@ -29,6 +29,12 @@ This system extracts unique voice characteristics (192-dimensional embeddings) f
 ## ✨ Features
 
 ### 🎤 Voice Authentication
+- **Advanced Audio Preprocessing**:
+  - **WebRTC VAD (Voice Activity Detection)**: Automatically removes leading/trailing silence before embedding extraction
+  - Intelligent speech-only segment extraction with configurable aggressiveness
+  - Energy-based fallback trimming for robust silence removal
+  - Automatic padding around speech segments to preserve natural speech boundaries
+  - Real-time logging of silence removal statistics
 - **Advanced Enrollment Strategy**: 
   - 3 mandatory voice samples (5-10 seconds each) for robust profile creation
   - Strict quality enforcement with automatic rejection of short samples
@@ -106,6 +112,7 @@ The Gradio interface will launch in your browser at `http://localhost:7860`
 - **Core Libraries**: 
   - SpeechBrain 1.0.3 (ECAPA-TDNN speaker verification)
   - OpenAI Whisper (ASR for text verification)
+  - WebRTC VAD 2.0.10 (Voice Activity Detection for silence removal)
   - jiwer 4.0.0 (Word Error Rate calculation)
   - Gradio 4.16.0 (Web interface)
   - NumPy, SoundFile (Audio processing)
@@ -169,39 +176,109 @@ See `requirements.txt` for complete dependencies.
 - **0.80** (default): Balanced security and convenience
 - **0.65-0.75**: More permissive, lower security
 
+## 🔧 Audio Preprocessing Pipeline
+
+The system employs a sophisticated audio preprocessing pipeline to ensure high-quality embeddings:
+
+```
+Raw Audio Input
+    ↓
+1. Convert to 16kHz Mono
+    ↓
+2. Voice Activity Detection (VAD)
+   • WebRTC VAD with aggressiveness=2
+   • Removes leading/trailing silence
+   • Preserves speech-only segments
+   • Adds 300ms padding around speech
+   • Fallback: Energy-based trimming
+    ↓
+3. Length Normalization
+   • Minimum: 5 seconds
+   • Maximum: 15 seconds
+   • Pad if too short, trim if too long
+    ↓
+4. ECAPA-TDNN Embedding Extraction
+   • 192-dimensional speaker embedding
+    ↓
+Output: Clean, normalized embedding
+```
+
+**Benefits:**
+- **Better Accuracy**: Removes silence that can introduce noise into embeddings
+- **Consistency**: Standardized preprocessing across all audio samples
+- **Robustness**: Handles various recording qualities and environments
+- **Transparency**: Logs silence removal statistics for monitoring
+
 ## 🏗️ Project Structure
 
 ```
 Voice-Login-ECAPA-TDNN/
 ├── app.py                   # Main application entry point
+├── Dockerfile               # Docker configuration for deployment
+├── requirements.txt         # Python dependencies
+├── enrollment_texts.json    # Vietnamese text prompts for anti-spoofing
 ├── src/                     # Source code modules
 │   ├── __init__.py          # Package initialization
-│   ├── core.py              # Core utilities (model, audio processing, embeddings)
-│   ├── database.py          # SQLite database operations
-│   ├── ui_login.py          # Login tab UI
+│   ├── core.py              # Core: model loading, VAD, audio preprocessing, embeddings
+│   ├── database.py          # SQLite database operations and logging
+│   ├── ui_login.py          # Login/authentication tab UI
 │   ├── ui_enroll.py         # Enrollment tab UI
 │   ├── ui_manage.py         # User management tab UI
-│   └── ui_statistics.py     # Statistics tab UI
-├── requirements.txt         # Python dependencies
-├── enrollment_texts.json    # Sample enrollment prompts
-├── voice_auth.db            # SQLite database (auto-created)
-├── ecapa/                   # Pre-trained model files (auto-downloaded)
-├── whisper/                 # Whisper model files (auto-downloaded)
+│   └── ui_statistics.py     # Statistics dashboard tab UI
+├── seed_db/                 # Database seeding utilities
+│   ├── seed_db.py           # Script to populate test users
+│   └── audio_samples/       # Sample audio files for seeding
+├── audio_samples/           # User audio samples directory (runtime)
+├── voice_auth.db            # SQLite database (auto-created at runtime)
+├── ecapa/                   # ECAPA-TDNN model files (auto-downloaded)
+├── whisper/                 # Whisper ASR model files (auto-downloaded)
+├── LICENSE                  # MIT License
 └── README.md                # This file
 ```
 
 **Module Overview:**
-- **app.py**: Orchestrates all UI tabs and launches the Gradio interface
-- **src/core.py**: ECAPA-TDNN model loading, audio processing, embedding extraction, text verification
-- **src/database.py**: SQLite operations, user management, authentication logging
-- **src/ui_*.py**: Individual UI tabs with their respective business logic
-- **enrollment_texts.json**: Vietnamese text prompts for anti-spoofing
+
+**Core Application:**
+- **app.py**: Application entry point, orchestrates UI tabs and launches Gradio interface
+- **Dockerfile**: Container configuration for HuggingFace Spaces deployment
+
+**Source Code (`src/`):**
+- **core.py**: 
+  - ECAPA-TDNN model loading and inference
+  - **WebRTC VAD implementation** for silence removal
+  - Audio preprocessing pipeline (mono conversion, resampling, normalization)
+  - Embedding extraction and similarity computation
+  - Whisper ASR integration for text verification
+  - Audio quality diagnostics
+- **database.py**: 
+  - SQLite database initialization and schema management
+  - User CRUD operations (create, read, update, delete)
+  - Embedding storage and retrieval
+  - Authentication attempt logging and audit trail
+- **ui_login.py**: Login/authentication interface with text verification
+- **ui_enroll.py**: Enrollment interface with multi-sample collection
+- **ui_manage.py**: User management interface for viewing/deleting users
+- **ui_statistics.py**: Statistics dashboard showing system metrics
+
+**Configuration & Data:**
+- **enrollment_texts.json**: Vietnamese text prompts for anti-spoofing during enrollment
+- **voice_auth.db**: SQLite database storing user embeddings and authentication logs
+- **test_vad.py**: Unit test script for validating VAD implementation
+
+**Pre-trained Models (Auto-downloaded):**
+- **ecapa/**: SpeechBrain ECAPA-TDNN model for speaker verification
+- **whisper/**: OpenAI Whisper-tiny model for speech recognition
 
 ## ⚙️ Configuration
 
 Key parameters in `src/core.py`:
 
 ```python
+# Audio Preprocessing (VAD)
+VAD_AGGRESSIVENESS = 2             # WebRTC VAD aggressiveness (0-3)
+VAD_FRAME_DURATION_MS = 30         # Frame size for VAD analysis
+VAD_PADDING_MS = 300               # Padding around speech segments
+
 # Enrollment Requirements
 REQUIRED_ENROLLMENT_SAMPLES = 3    # Mandatory 3 samples
 MIN_AUDIO_LENGTH_SEC = 5.0         # Minimum 5 seconds per sample
@@ -227,8 +304,10 @@ DEFAULT_THRESHOLD = 0.80           # Default similarity threshold
 flowchart TB
     Start([User Records Voice]) --> AudioInput[Audio Input]
     AudioInput --> Preprocessing[Audio Preprocessing<br/>- Mono conversion<br/>- 16kHz resampling]
-    Preprocessing --> QualityCheck{Quality Check<br/>Length ≥ 5s?}
-    QualityCheck -->|Fail| Reject1[❌ Reject:<br/>Too short]
+    Preprocessing --> VAD[Voice Activity Detection<br/>- WebRTC VAD aggressiveness=2<br/>- Remove silence<br/>- 300ms padding]
+    VAD --> LengthNorm[Length Normalization<br/>- Min: 5s, Max: 15s<br/>- Pad/trim as needed]
+    LengthNorm --> QualityCheck{Quality Check<br/>Passed?}
+    QualityCheck -->|Fail| Reject1[❌ Reject:<br/>Quality issues]
     QualityCheck -->|Pass| TextVerify{Text Verification<br/>Enabled?}
     
     TextVerify -->|Yes| Whisper[Whisper ASR<br/>Transcribe Speech]
@@ -262,6 +341,8 @@ flowchart TB
     style Reject3 fill:#f8d7da,color:#000
     style Whisper fill:#fff3cd,color:#000
     style ECAPA fill:#fff3cd,color:#000
+    style VAD fill:#d1ecf1,color:#000
+    style LengthNorm fill:#d1ecf1,color:#000
 ```
 
 ### Model Architecture
@@ -277,10 +358,15 @@ flowchart TB
 ### Audio Processing Pipeline
 1. Convert to mono (if stereo)
 2. Resample to 16kHz
-3. Quality analysis (amplitude, SNR, clipping, noise)
-4. Text verification via Whisper ASR (if enabled)
-5. Extract 192D embedding via ECAPA-TDNN
-6. Compute weighted similarity score
+3. **Voice Activity Detection (VAD)**: Remove leading/trailing silence using WebRTC VAD
+   - Aggressiveness: 2 (balanced for voice authentication)
+   - Padding: 300ms around speech segments
+   - Fallback: Energy-based silence trimming
+4. Length normalization (5-15 seconds)
+5. Quality analysis (amplitude, SNR, clipping, noise)
+6. Text verification via Whisper ASR (if enabled)
+7. Extract 192D embedding via ECAPA-TDNN
+8. Compute weighted similarity score
 
 ### Enrollment Strategy
 - **Mandatory samples**: Exactly 3 samples required
@@ -338,6 +424,7 @@ Developed as part of the **Advanced Image Processing** course at Saigon Universi
 - **Dynamic Prompts**: Refreshable texts prevent pre-recorded attacks
 
 ### Quality Assurance
+- **Voice Activity Detection**: Automatic silence removal improves embedding quality
 - **Minimum Length**: 5 seconds enforced (prevents truncated attacks)
 - **Audio Quality Analysis**: Real-time SNR, clipping, and noise detection
 - **Diagnostic Feedback**: Actionable suggestions for improvement
@@ -354,6 +441,7 @@ Developed as part of the **Advanced Image Processing** course at Saigon Universi
 - **SpeechBrain**: [Documentation](https://speechbrain.readthedocs.io/)
 - **ECAPA Model**: [HuggingFace Model Card](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb)
 - **Whisper ASR**: [OpenAI Whisper](https://github.com/openai/whisper)
+- **WebRTC VAD**: [Python WebRTC VAD](https://github.com/wiseman/py-webrtcvad)
 - **VoxCeleb Dataset**: [Official Website](https://www.robots.ox.ac.uk/~vgg/data/voxceleb/)
 
 ## 📝 License

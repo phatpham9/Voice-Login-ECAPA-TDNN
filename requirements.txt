@@ -7,3 +7,4 @@ huggingface-hub==0.26.2
 soundfile==0.12.1
 openai-whisper==20240930
 jiwer==3.0.4
+webrtcvad==2.0.10
