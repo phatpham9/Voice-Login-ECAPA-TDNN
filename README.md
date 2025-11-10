@@ -31,10 +31,12 @@ This system extracts unique voice characteristics (192-dimensional embeddings) f
 ### 🎤 Voice Authentication
 - **Advanced Audio Preprocessing**:
   - **WebRTC VAD (Voice Activity Detection)**: Automatically removes leading/trailing silence before embedding extraction
+  - **Amplitude Normalization**: Peak normalization to -3dBFS ensures consistent volume across all recordings
+  - **Clipping Prevention**: Automatic signal limiting prevents distortion and overload
   - Intelligent speech-only segment extraction with configurable aggressiveness
   - Energy-based fallback trimming for robust silence removal
   - Automatic padding around speech segments to preserve natural speech boundaries
-  - Real-time logging of silence removal statistics
+  - Real-time logging of all preprocessing operations
 - **Advanced Enrollment Strategy**: 
   - 3 mandatory voice samples (5-10 seconds each) for robust profile creation
   - Strict quality enforcement with automatic rejection of short samples
@@ -192,22 +194,33 @@ Raw Audio Input
    • Adds 300ms padding around speech
    • Fallback: Energy-based trimming
     ↓
-3. Length Normalization
+3. Amplitude Normalization
+   • Peak normalization to -3dBFS (~0.708)
+   • Ensures consistent volume levels
+   • Alternative: RMS normalization to -23dBFS
+    ↓
+4. Clipping Prevention
+   • Hard clipping at ±0.99 threshold
+   • Prevents signal overload
+   • Alternative: Soft clipping (tanh-based)
+    ↓
+5. Length Normalization
    • Minimum: 5 seconds
    • Maximum: 15 seconds
    • Pad if too short, trim if too long
     ↓
-4. ECAPA-TDNN Embedding Extraction
+6. ECAPA-TDNN Embedding Extraction
    • 192-dimensional speaker embedding
     ↓
 Output: Clean, normalized embedding
 ```
 
 **Benefits:**
-- **Better Accuracy**: Removes silence that can introduce noise into embeddings
-- **Consistency**: Standardized preprocessing across all audio samples
-- **Robustness**: Handles various recording qualities and environments
-- **Transparency**: Logs silence removal statistics for monitoring
+- **Better Accuracy**: Removes silence and normalizes amplitude for cleaner embeddings
+- **Consistency**: Standardized preprocessing across all audio samples regardless of recording volume
+- **Robustness**: Handles various recording qualities, volumes, and environments
+- **Prevents Distortion**: Clipping prevention ensures signals stay within valid range
+- **Transparency**: Detailed logging of all preprocessing steps for monitoring
 
 ## 🏗️ Project Structure
 
@@ -274,10 +287,15 @@ Voice-Login-ECAPA-TDNN/
 Key parameters in `src/core.py`:
 
 ```python
-# Audio Preprocessing (VAD)
+# Audio Preprocessing
 VAD_AGGRESSIVENESS = 2             # WebRTC VAD aggressiveness (0-3)
 VAD_FRAME_DURATION_MS = 30         # Frame size for VAD analysis
 VAD_PADDING_MS = 300               # Padding around speech segments
+AMPLITUDE_NORMALIZATION_TARGET = "peak"  # "peak" or "rms"
+PEAK_NORMALIZATION_DB = -3.0       # Target peak level in dBFS
+RMS_NORMALIZATION_DB = -23.0       # Target RMS level in dBFS (LUFS-like)
+CLIPPING_THRESHOLD = 0.99          # Maximum amplitude before clipping
+CLIPPING_METHOD = "clamp"          # "clamp" or "soft_clip"
 
 # Enrollment Requirements
 REQUIRED_ENROLLMENT_SAMPLES = 3    # Mandatory 3 samples
@@ -305,7 +323,9 @@ flowchart TB
     Start([User Records Voice]) --> AudioInput[Audio Input]
     AudioInput --> Preprocessing[Audio Preprocessing<br/>- Mono conversion<br/>- 16kHz resampling]
     Preprocessing --> VAD[Voice Activity Detection<br/>- WebRTC VAD aggressiveness=2<br/>- Remove silence<br/>- 300ms padding]
-    VAD --> LengthNorm[Length Normalization<br/>- Min: 5s, Max: 15s<br/>- Pad/trim as needed]
+    VAD --> AmpNorm[Amplitude Normalization<br/>- Peak: -3dBFS ~0.708<br/>- Consistent volume]
+    AmpNorm --> Clipping[Clipping Prevention<br/>- Threshold: ±0.99<br/>- Prevent distortion]
+    Clipping --> LengthNorm[Length Normalization<br/>- Min: 5s, Max: 15s<br/>- Pad/trim as needed]
     LengthNorm --> QualityCheck{Quality Check<br/>Passed?}
     QualityCheck -->|Fail| Reject1[❌ Reject:<br/>Quality issues]
     QualityCheck -->|Pass| TextVerify{Text Verification<br/>Enabled?}
@@ -342,6 +362,8 @@ flowchart TB
     style Whisper fill:#fff3cd,color:#000
     style ECAPA fill:#fff3cd,color:#000
     style VAD fill:#d1ecf1,color:#000
+    style AmpNorm fill:#d1ecf1,color:#000
+    style Clipping fill:#d1ecf1,color:#000
     style LengthNorm fill:#d1ecf1,color:#000
 ```
 
@@ -362,11 +384,17 @@ flowchart TB
    - Aggressiveness: 2 (balanced for voice authentication)
    - Padding: 300ms around speech segments
    - Fallback: Energy-based silence trimming
-4. Length normalization (5-15 seconds)
-5. Quality analysis (amplitude, SNR, clipping, noise)
-6. Text verification via Whisper ASR (if enabled)
-7. Extract 192D embedding via ECAPA-TDNN
-8. Compute weighted similarity score
+4. **Amplitude Normalization**: Normalize volume to consistent level
+   - Peak normalization to -3dBFS (~0.708 amplitude)
+   - Ensures consistent recording volumes across samples
+5. **Clipping Prevention**: Prevent signal overload
+   - Hard clipping at ±0.99 threshold
+   - Protects against distortion
+6. Length normalization (5-15 seconds)
+7. Quality analysis (amplitude, SNR, clipping, noise)
+8. Text verification via Whisper ASR (if enabled)
+9. Extract 192D embedding via ECAPA-TDNN
+10. Compute weighted similarity score
 
 ### Enrollment Strategy
 - **Mandatory samples**: Exactly 3 samples required

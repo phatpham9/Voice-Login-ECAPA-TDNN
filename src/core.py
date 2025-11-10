@@ -22,6 +22,13 @@ MIN_AUDIO_LENGTH_SEC = 5.0  # Increased from 3.0 for better quality
 REQUIRED_ENROLLMENT_SAMPLES = 3  # Mandatory number of samples for enrollment
 MAX_AUDIO_LENGTH_SEC = 15.0
 
+# Audio preprocessing configuration
+AMPLITUDE_NORMALIZATION_TARGET = "peak"  # "peak" or "rms"
+PEAK_NORMALIZATION_DB = -3.0  # Target peak level in dBFS (-3dB = ~0.708)
+RMS_NORMALIZATION_DB = -23.0  # Target RMS level in dBFS (LUFS-like)
+CLIPPING_THRESHOLD = 0.99  # Maximum amplitude before clipping
+CLIPPING_METHOD = "clamp"  # "clamp" or "soft_clip"
+
 # Score fusion configuration
 TOP_K_SAMPLES = 2  # Use top-2 of 3 samples for averaging
 SCORE_WEIGHT_TOP_K = 0.6  # 60% weight on top-k average
@@ -305,16 +312,134 @@ def trim_silence_energy_based(
     return trimmed.unsqueeze(0) if wav.ndim == 2 else trimmed
 
 
-def extract_embedding(audio_tuple) -> np.ndarray:
+def normalize_amplitude(
+    wav: torch.Tensor,
+    target_level: str = "peak",
+    peak_db: float = -3.0,
+    rms_db: float = -23.0,
+) -> torch.Tensor:
+    """
+    Normalize audio amplitude to target level.
+
+    Args:
+        wav: Audio tensor [1, T] or [T]
+        target_level: "peak" for peak normalization, "rms" for RMS normalization
+        peak_db: Target peak level in dBFS (default -3.0 dBFS)
+        rms_db: Target RMS level in dBFS (default -23.0 LUFS-like)
+
+    Returns:
+        Normalized audio tensor
+    """
+    wav_2d = wav.squeeze(0) if wav.ndim == 2 else wav
+
+    if target_level == "peak":
+        # Peak normalization to target dBFS
+        current_peak = torch.max(torch.abs(wav_2d))
+        if current_peak > 1e-6:  # Avoid division by zero
+            target_peak = 10 ** (peak_db / 20.0)
+            scale = target_peak / current_peak
+            wav_normalized = wav_2d * scale
+
+            print(
+                f"🔊 Amplitude normalized: Peak {20*torch.log10(current_peak):.1f}dB → {peak_db:.1f}dBFS "
+                f"(scale: {scale:.3f}x)"
+            )
+        else:
+            wav_normalized = wav_2d
+            print("⚠️ Audio is silent, skipping normalization")
+
+    elif target_level == "rms":
+        # RMS normalization
+        current_rms = torch.sqrt(torch.mean(wav_2d**2))
+        if current_rms > 1e-6:  # Avoid division by zero
+            target_rms = 10 ** (rms_db / 20.0)
+            scale = target_rms / current_rms
+            wav_normalized = wav_2d * scale
+
+            print(
+                f"🔊 Amplitude normalized: RMS {20*torch.log10(current_rms):.1f}dB → {rms_db:.1f}dBFS "
+                f"(scale: {scale:.3f}x)"
+            )
+        else:
+            wav_normalized = wav_2d
+            print("⚠️ Audio is silent, skipping normalization")
+    else:
+        wav_normalized = wav_2d
+        print(f"⚠️ Unknown normalization target: {target_level}, skipping")
+
+    return wav_normalized.unsqueeze(0) if wav.ndim == 2 else wav_normalized
+
+
+def prevent_clipping(
+    wav: torch.Tensor, threshold: float = 0.99, method: str = "clamp"
+) -> torch.Tensor:
+    """
+    Prevent audio clipping/overload.
+
+    Args:
+        wav: Audio tensor
+        threshold: Clipping threshold (default 0.99)
+        method: "clamp" for hard limiting, "soft_clip" for tanh-based soft clipping
+
+    Returns:
+        Clipping-prevented audio
+    """
+    max_val = torch.max(torch.abs(wav))
+
+    if max_val > threshold:
+        if method == "clamp":
+            # Hard clipping (simple)
+            wav_clipped = torch.clamp(wav, -threshold, threshold)
+            print(
+                f"⚠️ Clipping prevented: Peak {max_val:.3f} clamped to ±{threshold:.2f}"
+            )
+        elif method == "soft_clip":
+            # Soft clipping using tanh
+            scale = threshold / 1.0  # Adjust sensitivity
+            wav_clipped = threshold * torch.tanh(wav / scale)
+            print(
+                f"⚠️ Soft clipping applied: Peak {max_val:.3f} → {torch.max(torch.abs(wav_clipped)):.3f}"
+            )
+        else:
+            wav_clipped = wav
+    else:
+        wav_clipped = wav
+
+    return wav_clipped
+
+
+def extract_embedding(audio_tuple, return_stats: bool = False):
     """
     Convert audio (sr, wav) to ECAPA-TDNN embedding (192d vector).
     Audio is preprocessed with VAD to remove silence and normalized to be
     within MIN_AUDIO_LENGTH_SEC and MAX_AUDIO_LENGTH_SEC.
+
+    Args:
+        audio_tuple: (sample_rate, waveform_numpy)
+        return_stats: If True, return (embedding, preprocessing_stats) tuple
+
+    Returns:
+        If return_stats=False: numpy array (embedding)
+        If return_stats=True: tuple (embedding, preprocessing_stats dict)
     """
     sr, wav_np = audio_tuple
 
+    # Initialize preprocessing stats
+    preprocessing_stats = {
+        "original_duration": len(wav_np) / sr,
+        "vad_method": None,
+        "vad_removed_seconds": 0.0,
+        "vad_removed_percent": 0.0,
+        "amplitude_normalized": False,
+        "amplitude_scale": 1.0,
+        "original_peak_db": None,
+        "normalized_peak_db": None,
+        "clipping_applied": False,
+    }
+
     # Step 1: Convert to 16kHz mono
     wav = to_16k_mono(sr, wav_np)
+    original_length_16k = wav.shape[-1]
 
     # Step 2: Apply VAD to remove leading/trailing silence
     # Convert tensor back to numpy for VAD processing
@@ -331,12 +456,54 @@ def extract_embedding(audio_tuple) -> np.ndarray:
         )
         # Convert back to tensor
         wav = torch.from_numpy(wav_np_vad).unsqueeze(0)
+        preprocessing_stats["vad_method"] = "WebRTC VAD"
+        vad_removed = original_length_16k - wav.shape[-1]
+        preprocessing_stats["vad_removed_seconds"] = vad_removed / 16000
+        preprocessing_stats["vad_removed_percent"] = (
+            (vad_removed / original_length_16k) * 100 if original_length_16k > 0 else 0
+        )
     except Exception as e:
         print(f"⚠️ VAD failed ({e}), falling back to energy-based trimming")
         # Fallback to energy-based silence trimming
         wav = trim_silence_energy_based(wav, sr=16000, top_db=30.0)
+        preprocessing_stats["vad_method"] = "Energy-based"
+        vad_removed = original_length_16k - wav.shape[-1]
+        preprocessing_stats["vad_removed_seconds"] = vad_removed / 16000
+        preprocessing_stats["vad_removed_percent"] = (
+            (vad_removed / original_length_16k) * 100 if original_length_16k > 0 else 0
+        )
 
-    # Step 3: Ensure audio is within reasonable bounds (after VAD trimming)
+    # Step 3: Normalize amplitude (before length normalization to avoid padding affecting normalization)
+    wav_before_norm = wav.clone()
+    original_peak = torch.max(torch.abs(wav_before_norm))
+    preprocessing_stats["original_peak_db"] = (
+        20 * torch.log10(original_peak + 1e-10).item()
+    )
+
+    wav = normalize_amplitude(
+        wav,
+        target_level=AMPLITUDE_NORMALIZATION_TARGET,
+        peak_db=PEAK_NORMALIZATION_DB,
+        rms_db=RMS_NORMALIZATION_DB,
+    )
+
+    normalized_peak = torch.max(torch.abs(wav))
+    preprocessing_stats["normalized_peak_db"] = (
+        20 * torch.log10(normalized_peak + 1e-10).item()
+    )
+
+    if original_peak > 1e-6:
+        preprocessing_stats["amplitude_normalized"] = True
+        preprocessing_stats["amplitude_scale"] = (
+            normalized_peak / original_peak
+        ).item()
+
+    # Step 4: Prevent clipping after normalization
+    wav_before_clip = wav.clone()
+    wav = prevent_clipping(wav, threshold=CLIPPING_THRESHOLD, method=CLIPPING_METHOD)
+    preprocessing_stats["clipping_applied"] = not torch.allclose(wav, wav_before_clip)
+
+    # Step 5: Ensure audio is within reasonable bounds (after VAD trimming and normalization)
     wav = normalize_audio_length(
         wav,
         min_length_sec=MIN_AUDIO_LENGTH_SEC,
@@ -344,9 +511,14 @@ def extract_embedding(audio_tuple) -> np.ndarray:
         sr=16000,
     )
 
-    # Step 4: Extract embedding
+    # Step 6: Extract embedding
     emb = model.encode_batch(wav)  # tensor [1, 192]
-    return emb.squeeze(0).detach().cpu().numpy().astype("float32")
+    embedding = emb.squeeze(0).detach().cpu().numpy().astype("float32")
+
+    if return_stats:
+        return embedding, preprocessing_stats
+    else:
+        return embedding
 
 
 def cosine_similarity(a, b):
@@ -419,10 +591,9 @@ def compute_weighted_score(
     # Create strategy breakdown
     top_k_samples_str = ", ".join([f"#{i+1}" for i in sorted(top_k_indices)])
     strategy_breakdown = (
-        f"Final score computed as:\n"
-        f"  • Top-{top_k} avg (samples {top_k_samples_str}): {top_k_avg:.3f} × {SCORE_WEIGHT_TOP_K:.1f} = {SCORE_WEIGHT_TOP_K * top_k_avg:.3f}\n"
-        f"  • Centroid (all samples): {centroid_score:.3f} × {SCORE_WEIGHT_CENTROID:.1f} = {SCORE_WEIGHT_CENTROID * centroid_score:.3f}\n"
-        f"  • Final: {final_score:.3f}"
+        f"• Top-{top_k} avg (samples {top_k_samples_str}): {top_k_avg:.3f} × {SCORE_WEIGHT_TOP_K:.1f} = {SCORE_WEIGHT_TOP_K * top_k_avg:.3f}\n"
+        f"• Centroid (all samples): {centroid_score:.3f} × {SCORE_WEIGHT_CENTROID:.1f} = {SCORE_WEIGHT_CENTROID * centroid_score:.3f}\n"
+        f"• Final: {final_score:.3f}"
     )
 
     return {

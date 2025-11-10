@@ -75,7 +75,8 @@ def login(username, audio, threshold, expected_text):
     diagnostics = analyze_audio_quality(wav_np, sr)
     diagnostic_msg = generate_diagnostic_message(diagnostics, context="login")
 
-    new_emb = extract_embedding(audio_tuple)
+    # Extract embedding with preprocessing statistics
+    new_emb, preprocessing_stats = extract_embedding(audio_tuple, return_stats=True)
     print(f"New embedding shape: {new_emb.shape}, norm: {np.linalg.norm(new_emb):.3f}")
 
     # Compute similarity scores for all stored samples
@@ -114,21 +115,40 @@ def login(username, audio, threshold, expected_text):
         for i, score in enumerate(sample_scores):
             marker = "🏆" if i + 1 == score_result["best_match_index"] else "  "
             in_topk = "✓" if (i + 1) in score_result["top_k_indices"] else " "
-            result_msg += f"{marker} Sample {i+1}: {score:.3f} [{in_topk}]\n"
+            result_msg += f"• Sample {i+1}: {score:.3f} [{in_topk}] {marker}\n"
 
         result_msg += (
-            f"\n🎯 Verification Strategy:\n"
-            f"{score_result['strategy_breakdown']}\n"
-            f"\nLegend: [✓] = used in top-k, 🏆 = best match"
+            f"\n🎯 Verification Strategy:\n" f"{score_result['strategy_breakdown']}"
         )
+
+        # Add preprocessing statistics
+        result_msg += (
+            f"\n\n🔧 Audio Preprocessing:\n"
+            f"• Duration: {preprocessing_stats['original_duration']:.2f}s\n"
+            f"• VAD Method: {preprocessing_stats['vad_method']}\n"
+            f"• Silence Removed: {preprocessing_stats['vad_removed_seconds']:.2f}s "
+            f"({preprocessing_stats['vad_removed_percent']:.1f}%)\n"
+        )
+
+        if preprocessing_stats["amplitude_normalized"]:
+            result_msg += (
+                f"• Amplitude: {preprocessing_stats['original_peak_db']:.1f}dB → "
+                f"{preprocessing_stats['normalized_peak_db']:.1f}dB "
+                f"(scale: {preprocessing_stats['amplitude_scale']:.2f}x)\n"
+            )
+        else:
+            result_msg += f"• Amplitude: Not normalized (silent audio)\n"
+
+        if preprocessing_stats["clipping_applied"]:
+            result_msg += f"• Clipping Prevention: Applied\n"
 
         # Add text verification details if enabled
         if ENABLE_TEXT_VERIFICATION and expected_text and text_verify_result:
             result_msg += (
-                f"\n\n🔒 Text Verification: ✅ PASSED\n"
-                f"Expected: \"{text_verify_result['expected']}\"\n"
-                f"Detected: \"{text_verify_result['transcription']}\"\n"
-                f"WER: {text_verify_result['wer_score']:.2f} (threshold: {WER_THRESHOLD:.2f})"
+                f"\n🔒 Text Verification: ✅ PASSED\n"
+                f"• Expected: \"{text_verify_result['expected']}\"\n"
+                f"• Detected: \"{text_verify_result['transcription']}\"\n"
+                f"• WER: {text_verify_result['wer_score']:.2f} (threshold: {WER_THRESHOLD:.2f})"
             )
 
         # Add diagnostic info if there are issues (even on success)
@@ -146,21 +166,40 @@ def login(username, audio, threshold, expected_text):
         for i, score in enumerate(sample_scores):
             marker = "🏆" if i + 1 == score_result["best_match_index"] else "  "
             in_topk = "✓" if (i + 1) in score_result["top_k_indices"] else " "
-            result_msg += f"{marker} Sample {i+1}: {score:.3f} [{in_topk}]\n"
+            result_msg += f"• Sample {i+1}: {score:.3f} [{in_topk}] {marker}\n"
 
         result_msg += (
-            f"\n🎯 Verification Strategy:\n"
-            f"{score_result['strategy_breakdown']}\n"
-            f"\nLegend: [✓] = used in top-k, 🏆 = best match"
+            f"\n🎯 Verification Strategy:\n" f"{score_result['strategy_breakdown']}"
         )
+
+        # Add preprocessing statistics
+        result_msg += (
+            f"\n\n🔧 Audio Preprocessing:\n"
+            f"• Duration: {preprocessing_stats['original_duration']:.2f}s\n"
+            f"• VAD Method: {preprocessing_stats['vad_method']}\n"
+            f"• Silence Removed: {preprocessing_stats['vad_removed_seconds']:.2f}s "
+            f"({preprocessing_stats['vad_removed_percent']:.1f}%)\n"
+        )
+
+        if preprocessing_stats["amplitude_normalized"]:
+            result_msg += (
+                f"• Amplitude: {preprocessing_stats['original_peak_db']:.1f}dB → "
+                f"{preprocessing_stats['normalized_peak_db']:.1f}dB "
+                f"(scale: {preprocessing_stats['amplitude_scale']:.2f}x)\n"
+            )
+        else:
+            result_msg += f"• Amplitude: Not normalized (silent audio)\n"
+
+        if preprocessing_stats["clipping_applied"]:
+            result_msg += f"• Clipping Prevention: Applied\n"
 
         # Add text verification details if enabled
         if ENABLE_TEXT_VERIFICATION and expected_text and text_verify_result:
             result_msg += (
-                f"\n\n🔒 Text Verification: ✅ PASSED\n"
-                f"Expected: \"{text_verify_result['expected']}\"\n"
-                f"Detected: \"{text_verify_result['transcription']}\"\n"
-                f"WER: {text_verify_result['wer_score']:.2f} (threshold: {WER_THRESHOLD:.2f})"
+                f"\n🔒 Text Verification: ✅ PASSED\n"
+                f"• Expected: \"{text_verify_result['expected']}\"\n"
+                f"• Detected: \"{text_verify_result['transcription']}\"\n"
+                f"• WER: {text_verify_result['wer_score']:.2f} (threshold: {WER_THRESHOLD:.2f})"
             )
 
         # Always add diagnostic info on failure to help user troubleshoot
