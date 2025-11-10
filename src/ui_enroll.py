@@ -12,6 +12,8 @@ from src.core import (
     MIN_AUDIO_LENGTH_SEC,
     load_audio_file,
     extract_embedding,
+    analyze_audio_quality,
+    generate_diagnostic_message,
 )
 from src.database import save_multiple_embeddings
 
@@ -63,6 +65,7 @@ def enroll(username, audio1, audio2, audio3):
     audio_lengths = []
     audio_file_paths = []
     short_samples = []
+    all_diagnostics = []
 
     for idx, audio in audio_samples:
         # Handle both filepath (string) and tuple (sr, wav_np) formats
@@ -87,6 +90,10 @@ def enroll(username, audio1, audio2, audio3):
             f"Sample {idx}: sr={sr}, shape={wav_np.shape}, max={wav_np.max()}, min={wav_np.min()}"
         )
 
+        # Analyze audio quality
+        diagnostics = analyze_audio_quality(wav_np, sr)
+        all_diagnostics.append((idx, diagnostics))
+
         # Check audio length - enforce minimum length
         audio_length_sec = wav_np.shape[0] / sr
         audio_lengths.append(audio_length_sec)
@@ -102,16 +109,28 @@ def enroll(username, audio1, audio2, audio3):
         short_list = ", ".join(
             [f"Sample {idx} ({length:.1f}s)" for idx, length in short_samples]
         )
+
+        # Generate detailed diagnostic messages for short samples
+        diagnostic_msgs = []
+        for idx, diag in all_diagnostics:
+            if any(s[0] == idx for s in short_samples):
+                diag_msg = generate_diagnostic_message(diag, context="enrollment")
+                if diag_msg:
+                    diagnostic_msgs.append(f"Sample {idx}:{diag_msg}")
+
         # Get new random texts for retry
         text1, text2, text3 = get_enroll_texts()
-        return (
+
+        base_msg = (
             f"❌ Enrollment rejected: All samples must be at least {MIN_AUDIO_LENGTH_SEC:.0f} seconds long.\n\n"
-            f"Short samples detected: {short_list}\n\n"
-            f"Please re-record the short sample(s) with at least {MIN_AUDIO_LENGTH_SEC:.0f} seconds of clear speech.",
-            text1,
-            text2,
-            text3,
+            f"Short samples detected: {short_list}"
         )
+
+        # Add diagnostic details if available
+        if diagnostic_msgs:
+            base_msg += "\n" + "\n".join(diagnostic_msgs)
+
+        return (base_msg, text1, text2, text3)
 
     # Store all embeddings separately (centroid will be computed on-the-fly during login)
     save_multiple_embeddings(username, embeddings, audio_lengths, audio_file_paths)
@@ -119,15 +138,30 @@ def enroll(username, audio1, audio2, audio3):
     # Get new random texts for next enrollment
     text1, text2, text3 = get_enroll_texts()
 
+    # Check for quality warnings (even if enrollment succeeded)
+    quality_warnings = []
+    for idx, diag in all_diagnostics:
+        if diag["is_quiet"] or diag["has_noise"] or diag["is_clipped"]:
+            quality_warnings.append(idx)
+
     avg_length = sum(audio_lengths) / len(audio_lengths)
-    return (
+    success_msg = (
         f"✅ Enrolled '{username}' successfully!\n\n"
         f"• 3 samples recorded (avg length: {avg_length:.1f}s)\n"
-        f"• {embeddings[0].shape[-1]}D embeddings stored",
-        text1,
-        text2,
-        text3,
+        f"• {embeddings[0].shape[-1]}D embeddings stored"
     )
+
+    # Add quality warnings if any
+    if quality_warnings:
+        success_msg += "\n\n\n⚠️ Quality warnings detected in some samples:"
+        for idx, diag in all_diagnostics:
+            if idx in quality_warnings:
+                diag_msg = generate_diagnostic_message(diag, context="enrollment")
+                if diag_msg:
+                    success_msg += f"\n\nSample {idx}:{diag_msg}"
+        success_msg += "\n\n💡 Consider re-enrolling for better accuracy if login performance is poor."
+
+    return (success_msg, text1, text2, text3)
 
 
 def create_enroll_tab():

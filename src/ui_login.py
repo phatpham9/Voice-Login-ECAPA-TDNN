@@ -13,6 +13,8 @@ from src.core import (
     extract_embedding,
     cosine_similarity,
     compute_centroid,
+    analyze_audio_quality,
+    generate_diagnostic_message,
 )
 from src.database import load_embedding, log_authentication
 
@@ -49,13 +51,9 @@ def login(username, audio, threshold):
     if stored_embeddings is None:
         return f"❌ User '{username}' not found. Please enroll first."
 
-    # Check audio length and provide warning
-    audio_length_sec = wav_np.shape[0] / sr
-    warning_msg = ""
-    if audio_length_sec < 2.0:
-        warning_msg = f"\n\n⚠️ Warning: Audio is very short ({audio_length_sec:.1f}s). For better accuracy, record at least {MIN_AUDIO_LENGTH_SEC:.0f} seconds of speech."
-    elif audio_length_sec < MIN_AUDIO_LENGTH_SEC:
-        warning_msg = f"\n\n💡 Tip: Audio is short ({audio_length_sec:.1f}s). Recording {MIN_AUDIO_LENGTH_SEC:.0f}+ seconds may improve accuracy."
+    # Analyze audio quality
+    diagnostics = analyze_audio_quality(wav_np, sr)
+    diagnostic_msg = generate_diagnostic_message(diagnostics, context="login")
 
     new_emb = extract_embedding(audio_tuple)
     print(f"New embedding shape: {new_emb.shape}, norm: {np.linalg.norm(new_emb):.3f}")
@@ -92,18 +90,34 @@ def login(username, audio, threshold):
             if centroid_score > best_match_score
             else f"sample {matched_sample}"
         )
-        return (
+        result_msg = (
             f"✅ SUCCESS — score={final_score:.3f} ≥ threshold={threshold:.2f}\n\n"
             f"• Best match: {best_match_score:.3f} (sample {matched_sample})\n"
             f"• Centroid: {centroid_score:.3f}\n"
-            f"• Strategy used: {strategy_used}{warning_msg}"
+            f"• Strategy used: {strategy_used}"
         )
+        # Add diagnostic info if there are issues (even on success)
+        if diagnostic_msg:
+            result_msg += diagnostic_msg
+        return result_msg
     else:
-        return (
+        result_msg = (
             f"❌ DENIED — score={final_score:.3f} < threshold={threshold:.2f}\n\n"
             f"• Best match: {best_match_score:.3f} (sample {matched_sample})\n"
-            f"• Centroid: {centroid_score:.3f}{warning_msg}"
+            f"• Centroid: {centroid_score:.3f}"
         )
+        # Always add diagnostic info on failure to help user troubleshoot
+        if diagnostic_msg:
+            result_msg += diagnostic_msg
+        else:
+            # Even if no specific issues detected, provide general guidance
+            result_msg += (
+                "\n\n💬 Suggestions:\n"
+                f"• Ensure you record at least {MIN_AUDIO_LENGTH_SEC:.0f} seconds of clear speech\n"
+                "• Speak in a quiet environment\n"
+                "• Consider re-enrolling if you continue to have issues"
+            )
+        return result_msg
 
 
 def create_login_tab():

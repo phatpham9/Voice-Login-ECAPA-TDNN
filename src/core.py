@@ -153,3 +153,113 @@ def compute_centroid(embeddings: list) -> np.ndarray:
     centroid = centroid / (np.linalg.norm(centroid) + 1e-9)
 
     return centroid.astype("float32")
+
+
+def analyze_audio_quality(wav_np: np.ndarray, sr: int) -> dict:
+    """
+    Analyze audio quality and provide diagnostic information.
+
+    Args:
+        wav_np: Audio waveform as numpy array
+        sr: Sample rate
+
+    Returns:
+        Dictionary with diagnostic information
+    """
+    audio_length_sec = wav_np.shape[0] / sr
+    max_amplitude = float(np.max(np.abs(wav_np)))
+
+    # Detect if audio is too quiet
+    is_quiet = max_amplitude < 0.1
+
+    # Detect if audio is clipped (too loud)
+    is_clipped = max_amplitude > 0.95
+
+    # Estimate Signal-to-Noise Ratio (simple energy-based)
+    # Use first/last 0.5s as potential silence/noise reference
+    noise_samples = min(int(0.5 * sr), len(wav_np) // 4)
+    if len(wav_np) > noise_samples * 2:
+        noise_level = np.mean(np.abs(wav_np[:noise_samples]))
+        signal_level = np.mean(np.abs(wav_np[noise_samples:-noise_samples]))
+        snr_estimate = signal_level / (noise_level + 1e-9)
+        has_noise = snr_estimate < 3.0  # Low SNR indicates noise
+    else:
+        snr_estimate = None
+        has_noise = False
+
+    return {
+        "length_sec": audio_length_sec,
+        "max_amplitude": max_amplitude,
+        "is_quiet": is_quiet,
+        "is_clipped": is_clipped,
+        "has_noise": has_noise,
+        "snr_estimate": snr_estimate,
+    }
+
+
+def generate_diagnostic_message(diagnostics: dict, context: str = "general") -> str:
+    """
+    Generate human-readable diagnostic message with suggestions.
+
+    Args:
+        diagnostics: Dictionary from analyze_audio_quality()
+        context: Either "enrollment" or "login" or "general"
+
+    Returns:
+        Formatted diagnostic message with suggestions
+    """
+    issues = []
+    suggestions = []
+
+    # Check length
+    if diagnostics["length_sec"] < MIN_AUDIO_LENGTH_SEC:
+        issues.append(
+            f"Audio too short ({diagnostics['length_sec']:.1f}s, minimum: {MIN_AUDIO_LENGTH_SEC:.0f}s)"
+        )
+        suggestions.append(
+            f"• Record at least {MIN_AUDIO_LENGTH_SEC:.0f} seconds of clear speech"
+        )
+
+    # Check amplitude
+    if diagnostics["is_quiet"]:
+        issues.append(
+            f"Audio very quiet (max amplitude: {diagnostics['max_amplitude']:.2f})"
+        )
+        suggestions.append("• Speak louder or move the microphone closer")
+
+    if diagnostics["is_clipped"]:
+        issues.append(
+            f"Audio clipped/distorted (max amplitude: {diagnostics['max_amplitude']:.2f})"
+        )
+        suggestions.append("• Speak softer or move the microphone further away")
+
+    # Check noise
+    if diagnostics["has_noise"]:
+        issues.append("Background noise detected")
+        suggestions.append("• Record in a quieter environment")
+        if context == "enrollment":
+            suggestions.append(
+                "• Consider re-enrolling in a quiet space for better accuracy"
+            )
+
+    # Build message
+    if not issues:
+        return ""
+
+    msg = "\n\n📊 Audio Diagnostics:\n"
+    msg += f"• Length: {diagnostics['length_sec']:.1f}s\n"
+    msg += f"• Amplitude: {diagnostics['max_amplitude']:.2f}\n"
+    if diagnostics["snr_estimate"] is not None:
+        msg += f"• Signal quality: {'Good' if diagnostics['snr_estimate'] > 5 else 'Poor'}\n"
+
+    if issues:
+        msg += "\n⚠️ Issues detected:\n"
+        for issue in issues:
+            msg += f"• {issue}\n"
+
+    if suggestions:
+        msg += "\n💬 Suggestions:\n"
+        for suggestion in suggestions:
+            msg += f"{suggestion}\n"
+
+    return msg
