@@ -221,6 +221,49 @@ DEFAULT_THRESHOLD = 0.80           # Default similarity threshold
 
 ## 🔬 Technical Details
 
+### System Architecture Overview
+
+```mermaid
+flowchart TB
+    Start([User Records Voice]) --> AudioInput[Audio Input]
+    AudioInput --> Preprocessing[Audio Preprocessing<br/>- Mono conversion<br/>- 16kHz resampling]
+    Preprocessing --> QualityCheck{Quality Check<br/>Length ≥ 5s?}
+    QualityCheck -->|Fail| Reject1[❌ Reject:<br/>Too short]
+    QualityCheck -->|Pass| TextVerify{Text Verification<br/>Enabled?}
+    
+    TextVerify -->|Yes| Whisper[Whisper ASR<br/>Transcribe Speech]
+    Whisper --> WERCalc[Calculate WER vs<br/>Expected Text]
+    WERCalc --> WERCheck{WER ≤ 0.50?}
+    WERCheck -->|Fail| Reject2[❌ Reject:<br/>Anti-spoof failed]
+    WERCheck -->|Pass| ECAPA[ECAPA-TDNN<br/>Extract 192D Embedding]
+    
+    TextVerify -->|No| ECAPA
+    
+    ECAPA --> Mode{Mode?}
+    
+    Mode -->|Enrollment| Store[Store Embedding<br/>to SQLite DB]
+    Store --> Success1[✅ Enrollment<br/>Complete]
+    
+    Mode -->|Login| LoadDB[Load User's<br/>3 Stored Embeddings]
+    LoadDB --> CompareAll[Compute Cosine Similarity<br/>with All Samples]
+    CompareAll --> TopK[Top-2 Average<br/>60% weight]
+    CompareAll --> Centroid[Centroid Similarity<br/>40% weight]
+    TopK --> Fusion[Weighted Fusion<br/>Final Score]
+    Centroid --> Fusion
+    Fusion --> ThresholdCheck{Score ≥<br/>Threshold?}
+    ThresholdCheck -->|Yes| Success2[✅ Authentication<br/>Success]
+    ThresholdCheck -->|No| Reject3[❌ Authentication<br/>Failed]
+    
+    style Start fill:#e1f5ff,color:#000
+    style Success1 fill:#d4edda,color:#000
+    style Success2 fill:#d4edda,color:#000
+    style Reject1 fill:#f8d7da,color:#000
+    style Reject2 fill:#f8d7da,color:#000
+    style Reject3 fill:#f8d7da,color:#000
+    style Whisper fill:#fff3cd,color:#000
+    style ECAPA fill:#fff3cd,color:#000
+```
+
 ### Model Architecture
 - **Speaker Verification**: ECAPA-TDNN (SpeechBrain pre-trained)
   - Source: `speechbrain/spkrec-ecapa-voxceleb`
