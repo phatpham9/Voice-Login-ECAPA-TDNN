@@ -14,7 +14,8 @@ from speechbrain.inference.speaker import EncoderClassifier
 # Configuration
 # ------------------------------------
 DEFAULT_THRESHOLD = 0.80
-MIN_AUDIO_LENGTH_SEC = 3.0
+MIN_AUDIO_LENGTH_SEC = 5.0  # Increased from 3.0 for better quality
+REQUIRED_ENROLLMENT_SAMPLES = 3  # Mandatory number of samples for enrollment
 MAX_AUDIO_LENGTH_SEC = 15.0
 
 
@@ -132,3 +133,23 @@ def cosine_similarity(a, b):
     a = a / (np.linalg.norm(a) + 1e-9)
     b = b / (np.linalg.norm(b) + 1e-9)
     return float(np.dot(a, b))
+
+
+def compute_centroid(embeddings: list) -> np.ndarray:
+    """
+    Compute normalized centroid of multiple embeddings.
+
+    Args:
+        embeddings: List of numpy arrays (embeddings)
+
+    Returns:
+        Normalized centroid embedding
+    """
+    # Stack embeddings and compute mean
+    embeddings_array = np.stack([emb.flatten() for emb in embeddings])
+    centroid = np.mean(embeddings_array, axis=0)
+
+    # Normalize the centroid
+    centroid = centroid / (np.linalg.norm(centroid) + 1e-9)
+
+    return centroid.astype("float32")

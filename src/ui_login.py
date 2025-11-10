@@ -8,9 +8,11 @@ import random
 from src.core import (
     ENROLLMENT_TEXTS,
     DEFAULT_THRESHOLD,
+    MIN_AUDIO_LENGTH_SEC,
     load_audio_file,
     extract_embedding,
     cosine_similarity,
+    compute_centroid,
 )
 from src.database import load_embedding, log_authentication
 
@@ -42,6 +44,7 @@ def login(username, audio, threshold):
         f"Audio info: sr={sr}, shape={wav_np.shape}, max={wav_np.max()}, min={wav_np.min()}"
     )
 
+    # Load stored embeddings
     stored_embeddings = load_embedding(username)
     if stored_embeddings is None:
         return f"❌ User '{username}' not found. Please enroll first."
@@ -50,32 +53,57 @@ def login(username, audio, threshold):
     audio_length_sec = wav_np.shape[0] / sr
     warning_msg = ""
     if audio_length_sec < 2.0:
-        warning_msg = f"\n\n⚠️ Warning: Audio is very short ({audio_length_sec:.1f}s). For better accuracy, record at least 3-5 seconds of speech."
-    elif audio_length_sec < 3.0:
-        warning_msg = f"\n\n💡 Tip: Audio is short ({audio_length_sec:.1f}s). Recording 3-5+ seconds may improve accuracy."
+        warning_msg = f"\n\n⚠️ Warning: Audio is very short ({audio_length_sec:.1f}s). For better accuracy, record at least {MIN_AUDIO_LENGTH_SEC:.0f} seconds of speech."
+    elif audio_length_sec < MIN_AUDIO_LENGTH_SEC:
+        warning_msg = f"\n\n💡 Tip: Audio is short ({audio_length_sec:.1f}s). Recording {MIN_AUDIO_LENGTH_SEC:.0f}+ seconds may improve accuracy."
 
     new_emb = extract_embedding(audio_tuple)
     print(f"New embedding shape: {new_emb.shape}, norm: {np.linalg.norm(new_emb):.3f}")
 
-    # Compare against all stored embeddings and use the best (maximum) score
+    # Strategy 1: Compare against all stored embeddings and use the best (maximum) score
     scores = []
     for i, stored_emb in enumerate(stored_embeddings):
         score = cosine_similarity(stored_emb, new_emb)
         scores.append(score)
         print(f"Similarity to stored sample {i+1}: {score:.4f}")
 
-    best_score = max(scores)
-    matched_sample = scores.index(best_score) + 1
-    print(f"Best score: {best_score:.4f}, Threshold: {threshold:.2f}")
+    best_match_score = max(scores)
+    matched_sample = scores.index(best_match_score) + 1
+
+    # Strategy 2: Compute centroid on-the-fly and compare
+    centroid = compute_centroid(stored_embeddings)
+    centroid_score = cosine_similarity(centroid, new_emb)
+    print(f"Similarity to profile centroid: {centroid_score:.4f}")
+
+    # Final score: max(best_match, centroid_similarity)
+    final_score = max(best_match_score, centroid_score)
+
+    print(f"Best match score: {best_match_score:.4f}")
+    print(f"Centroid score: {centroid_score:.4f}")
+    print(f"Final score: {final_score:.4f}, Threshold: {threshold:.2f}")
 
     # Log authentication attempt
-    success = best_score >= threshold
-    log_authentication(username, success, best_score, threshold, matched_sample)
+    success = final_score >= threshold
+    log_authentication(username, success, final_score, threshold, matched_sample)
 
     if success:
-        return f"✅ SUCCESS — score={best_score:.3f} ≥ threshold={threshold:.2f} (matched sample {matched_sample}/{len(scores)}){warning_msg}"
+        strategy_used = (
+            "centroid"
+            if centroid_score > best_match_score
+            else f"sample {matched_sample}"
+        )
+        return (
+            f"✅ SUCCESS — score={final_score:.3f} ≥ threshold={threshold:.2f}\n\n"
+            f"• Best match: {best_match_score:.3f} (sample {matched_sample})\n"
+            f"• Centroid: {centroid_score:.3f}\n"
+            f"• Strategy used: {strategy_used}{warning_msg}"
+        )
     else:
-        return f"❌ DENIED — score={best_score:.3f} < threshold={threshold:.2f}{warning_msg}"
+        return (
+            f"❌ DENIED — score={final_score:.3f} < threshold={threshold:.2f}\n\n"
+            f"• Best match: {best_match_score:.3f} (sample {matched_sample})\n"
+            f"• Centroid: {centroid_score:.3f}{warning_msg}"
+        )
 
 
 def create_login_tab():
@@ -89,7 +117,7 @@ def create_login_tab():
             a2 = gr.Audio(
                 sources=["microphone", "upload"],
                 type="filepath",
-                label="Record yourself reading the text below (3-10s)",
+                label=f"Record yourself reading the text below ({MIN_AUDIO_LENGTH_SEC:.0f}-10s recommended)",
             )
             login_text_display = gr.Textbox(
                 label="Text to Read",
