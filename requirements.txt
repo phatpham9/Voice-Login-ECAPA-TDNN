@@ -5,5 +5,5 @@ torchaudio==2.4.1
 numpy==1.26.4
 huggingface-hub==0.26.2
 soundfile==0.12.1
-openai-whisper==20231117
+openai-whisper==20240930
 jiwer==3.0.4
