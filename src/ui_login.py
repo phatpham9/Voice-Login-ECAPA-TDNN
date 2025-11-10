@@ -9,6 +9,8 @@ from src.core import (
     ENROLLMENT_TEXTS,
     DEFAULT_THRESHOLD,
     MIN_AUDIO_LENGTH_SEC,
+    ENABLE_TEXT_VERIFICATION,
+    WER_THRESHOLD,
     load_audio_file,
     extract_embedding,
     cosine_similarity,
@@ -16,6 +18,7 @@ from src.core import (
     compute_weighted_score,
     analyze_audio_quality,
     generate_diagnostic_message,
+    verify_spoken_text,
 )
 from src.database import load_embedding, log_authentication
 
@@ -27,7 +30,7 @@ def get_login_text():
     return "Please record your voice."
 
 
-def login(username, audio, threshold):
+def login(username, audio, threshold, expected_text):
     if not username:
         return "⚠️ Please enter a username.", None
     if audio is None:
@@ -47,10 +50,26 @@ def login(username, audio, threshold):
         f"Audio info: sr={sr}, shape={wav_np.shape}, max={wav_np.max()}, min={wav_np.min()}"
     )
 
+    # Text verification (anti-spoofing) - check BEFORE embedding extraction
+    text_verify_result = None
+    if ENABLE_TEXT_VERIFICATION and expected_text:
+        text_verify_result = verify_spoken_text(audio_tuple, expected_text)
+        if not text_verify_result["passed"]:
+            # Text verification failed - reject immediately
+            return (
+                f"❌ AUTHENTICATION FAILED\n\n"
+                f"🔒 Text Verification: ❌ FAILED\n"
+                f"Expected: \"{text_verify_result['expected']}\"\n"
+                f"Detected: \"{text_verify_result['transcription']}\"\n"
+                f"WER: {text_verify_result['wer_score']:.2f} > threshold: {WER_THRESHOLD:.2f}\n\n"
+                f"🚨 ANTI-SPOOF: Possible replay attack or wrong text!\n\n"
+                f"⚠️ Speaker verification was not performed due to text verification failure."
+            ), get_login_text()
+
     # Load stored embeddings
     stored_embeddings = load_embedding(username)
     if stored_embeddings is None:
-        return f"❌ User '{username}' not found. Please enroll first."
+        return f"❌ User '{username}' not found. Please enroll first.", get_login_text()
 
     # Analyze audio quality
     diagnostics = analyze_audio_quality(wav_np, sr)
@@ -103,11 +122,20 @@ def login(username, audio, threshold):
             f"\nLegend: [✓] = used in top-k, 🏆 = best match"
         )
 
+        # Add text verification details if enabled
+        if ENABLE_TEXT_VERIFICATION and expected_text and text_verify_result:
+            result_msg += (
+                f"\n\n🔒 Text Verification: ✅ PASSED\n"
+                f"Expected: \"{text_verify_result['expected']}\"\n"
+                f"Detected: \"{text_verify_result['transcription']}\"\n"
+                f"WER: {text_verify_result['wer_score']:.2f} (threshold: {WER_THRESHOLD:.2f})"
+            )
+
         # Add diagnostic info if there are issues (even on success)
         if diagnostic_msg:
             result_msg += diagnostic_msg
 
-        return result_msg
+        return result_msg, get_login_text()
     else:
         result_msg = (
             f"❌ DENIED — score={final_score:.3f} < threshold={threshold:.2f}\n\n"
@@ -126,6 +154,15 @@ def login(username, audio, threshold):
             f"\nLegend: [✓] = used in top-k, 🏆 = best match"
         )
 
+        # Add text verification details if enabled
+        if ENABLE_TEXT_VERIFICATION and expected_text and text_verify_result:
+            result_msg += (
+                f"\n\n🔒 Text Verification: ✅ PASSED\n"
+                f"Expected: \"{text_verify_result['expected']}\"\n"
+                f"Detected: \"{text_verify_result['transcription']}\"\n"
+                f"WER: {text_verify_result['wer_score']:.2f} (threshold: {WER_THRESHOLD:.2f})"
+            )
+
         # Always add diagnostic info on failure to help user troubleshoot
         if diagnostic_msg:
             result_msg += diagnostic_msg
@@ -133,12 +170,12 @@ def login(username, audio, threshold):
             # Even if no specific issues detected, provide general guidance
             result_msg += (
                 "\n\n💬 Suggestions:\n"
-                f"• Ensure you record at least {MIN_AUDIO_LENGTH_SEC:.0f} seconds of clear speech\n"
-                "• Speak in a quiet environment\n"
-                "• Consider re-enrolling if you continue to have issues"
+                f"💡 Ensure you record at least {MIN_AUDIO_LENGTH_SEC:.0f} seconds of clear speech\n"
+                "💡 Speak in a quiet environment\n"
+                "💡 Consider re-enrolling if you continue to have issues"
             )
 
-        return result_msg
+        return result_msg, get_login_text()
 
 
 def create_login_tab():
@@ -174,4 +211,8 @@ def create_login_tab():
         refresh_login_text_btn.click(
             get_login_text, inputs=[], outputs=[login_text_display]
         )
-        login_btn.click(login, inputs=[u2, a2, th], outputs=[out])
+        login_btn.click(
+            login,
+            inputs=[u2, a2, th, login_text_display],
+            outputs=[out, login_text_display],
+        )

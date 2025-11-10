@@ -7,6 +7,8 @@ import torch
 import torchaudio
 import numpy as np
 import json
+import whisper
+from jiwer import wer
 from speechbrain.inference.speaker import EncoderClassifier
 
 
@@ -23,6 +25,10 @@ TOP_K_SAMPLES = 2  # Use top-2 of 3 samples for averaging
 SCORE_WEIGHT_TOP_K = 0.6  # 60% weight on top-k average
 SCORE_WEIGHT_CENTROID = 0.4  # 40% weight on centroid
 
+# Anti-spoofing configuration
+WER_THRESHOLD = 0.5  # Accept if Word Error Rate < 50%
+ENABLE_TEXT_VERIFICATION = True  # Enable/disable text verification
+
 
 # ------------------------------------
 # Load ECAPA-TDNN pretrained model
@@ -32,6 +38,14 @@ model = EncoderClassifier.from_hparams(
     savedir="ecapa",
     run_opts={"device": "cpu"},
 )
+
+
+# ------------------------------------
+# Load Whisper model for ASR
+# ------------------------------------
+print("Loading Whisper model (tiny)...")
+whisper_model = whisper.load_model("tiny")
+print("✅ Whisper model loaded")
 
 
 # ------------------------------------
@@ -215,6 +229,101 @@ def compute_weighted_score(
         "best_match_index": best_match_idx + 1,  # 1-indexed
         "centroid_score": centroid_score,
         "strategy_breakdown": strategy_breakdown,
+    }
+
+
+def verify_spoken_text(audio_tuple, expected_text: str) -> dict:
+    """
+    Verify that spoken audio matches expected text using Whisper ASR.
+    This provides anti-spoofing protection against replay attacks and TTS.
+
+    Args:
+        audio_tuple: (sample_rate, waveform_numpy)
+        expected_text: The text that should have been spoken
+
+    Returns:
+        Dictionary with:
+        - transcription: What was actually said
+        - expected: What should have been said
+        - wer_score: Word Error Rate (0.0 = perfect, 1.0 = complete mismatch)
+        - passed: Boolean indicating if verification passed
+        - message: Human-readable result message
+    """
+    sr, wav_np = audio_tuple
+
+    # Convert to float32 and normalize to [-1, 1] if needed
+    if wav_np.dtype != np.float32:
+        wav_np = wav_np.astype(np.float32)
+
+    # Ensure mono
+    if wav_np.ndim > 1:
+        wav_np = wav_np.mean(axis=1)
+
+    # Resample to 16kHz if needed (Whisper expects 16kHz)
+    if sr != 16000:
+        wav_tensor = torch.from_numpy(wav_np)
+        wav_tensor = torchaudio.functional.resample(
+            wav_tensor, orig_freq=sr, new_freq=16000
+        )
+        wav_np = wav_tensor.numpy()
+
+    # Transcribe using Whisper
+    try:
+        result = whisper_model.transcribe(
+            wav_np, language="vi", task="transcribe", fp16=False, verbose=False
+        )
+        transcription = result["text"].strip()
+    except Exception as e:
+        print(f"Whisper transcription error: {e}")
+        return {
+            "transcription": "",
+            "expected": expected_text,
+            "wer_score": 1.0,
+            "passed": False,
+            "message": f"⚠️ Transcription failed: {str(e)}",
+        }
+
+    # Normalize texts for comparison (lowercase, remove extra spaces)
+    expected_normalized = " ".join(expected_text.lower().split())
+    transcribed_normalized = " ".join(transcription.lower().split())
+
+    # Calculate Word Error Rate
+    if expected_normalized and transcribed_normalized:
+        wer_score = wer(expected_normalized, transcribed_normalized)
+    else:
+        wer_score = 1.0  # Complete mismatch if either is empty
+
+    # Check if passed
+    passed = wer_score <= WER_THRESHOLD
+
+    # Create message
+    if passed:
+        message = (
+            f"🔒 Text Verification: ✅ PASSED\n"
+            f'Expected: "{expected_text}"\n'
+            f'Detected: "{transcription}"\n'
+            f"WER: {wer_score:.2f} (threshold: {WER_THRESHOLD:.2f})"
+        )
+    else:
+        message = (
+            f"🔒 Text Verification: ❌ FAILED\n"
+            f'Expected: "{expected_text}"\n'
+            f'Detected: "{transcription}"\n'
+            f"WER: {wer_score:.2f} > threshold: {WER_THRESHOLD:.2f}\n\n"
+            f"🚨 ANTI-SPOOF: Possible replay attack or wrong text!\n"
+            f"Please re-record and read the displayed text carefully."
+        )
+
+    print(
+        f"Text verification - Expected: '{expected_text}', Got: '{transcription}', WER: {wer_score:.3f}, Passed: {passed}"
+    )
+
+    return {
+        "transcription": transcription,
+        "expected": expected_text,
+        "wer_score": wer_score,
+        "passed": passed,
+        "message": message,
     }
 
 

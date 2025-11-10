@@ -10,10 +10,12 @@ from pathlib import Path
 from src.core import (
     ENROLLMENT_TEXTS,
     MIN_AUDIO_LENGTH_SEC,
+    ENABLE_TEXT_VERIFICATION,
     load_audio_file,
     extract_embedding,
     analyze_audio_quality,
     generate_diagnostic_message,
+    verify_spoken_text,
 )
 from src.database import save_multiple_embeddings
 
@@ -33,23 +35,29 @@ def get_enroll_texts():
         return "", "", ""
 
 
-def enroll(username, audio1, audio2, audio3):
+def enroll(username, audio1, audio2, audio3, text1, text2, text3):
     if not username:
-        return "⚠️ Please enter a username.", None, None, None
+        return "⚠️ Please enter a username.", None, None, None, None, None, None
 
-    # Collect all provided audio samples
+    # Collect all provided audio samples with their expected texts
     audio_samples = []
-    for i, audio in enumerate([audio1, audio2, audio3], 1):
+    expected_texts = [text1, text2, text3]
+    for i, (audio, expected_text) in enumerate(
+        zip([audio1, audio2, audio3], expected_texts), 1
+    ):
         if audio is not None:
-            audio_samples.append((i, audio))
+            audio_samples.append((i, audio, expected_text))
 
     # Enforce 3 mandatory samples
     if len(audio_samples) < 3:
         return (
             f"❌ All 3 voice samples are required for enrollment. You provided {len(audio_samples)}/3 samples. Please record all samples.",
-            None,
-            None,
-            None,
+            text1,
+            text2,
+            text3,  # Keep current texts displayed
+            text1,
+            text2,
+            text3,  # Keep state values
         )
 
     # Create audio_samples directory if it doesn't exist
@@ -66,8 +74,9 @@ def enroll(username, audio1, audio2, audio3):
     audio_file_paths = []
     short_samples = []
     all_diagnostics = []
+    text_verification_failures = []
 
-    for idx, audio in audio_samples:
+    for idx, audio, expected_text in audio_samples:
         # Handle both filepath (string) and tuple (sr, wav_np) formats
         if isinstance(audio, str):
             print(f"Sample {idx}: Audio received as filepath: {audio}")
@@ -90,6 +99,12 @@ def enroll(username, audio1, audio2, audio3):
             f"Sample {idx}: sr={sr}, shape={wav_np.shape}, max={wav_np.max()}, min={wav_np.min()}"
         )
 
+        # Text verification (anti-spoofing)
+        if ENABLE_TEXT_VERIFICATION and expected_text:
+            text_verify_result = verify_spoken_text(audio_tuple, expected_text)
+            if not text_verify_result["passed"]:
+                text_verification_failures.append((idx, text_verify_result))
+
         # Analyze audio quality
         diagnostics = analyze_audio_quality(wav_np, sr)
         all_diagnostics.append((idx, diagnostics))
@@ -103,6 +118,27 @@ def enroll(username, audio1, audio2, audio3):
         emb = extract_embedding(audio_tuple)
         embeddings.append(emb)
         print(f"Sample {idx} embedding norm: {np.linalg.norm(emb):.3f}")
+
+    # Check text verification failures first (anti-spoofing)
+    if text_verification_failures:
+        # Get new random texts for retry
+        text1, text2, text3 = get_enroll_texts()
+
+        failure_msgs = []
+        for idx, verify_result in text_verification_failures:
+            failure_msgs.append(f"\nSample {idx}:\n{verify_result['message']}")
+
+        new_text1, new_text2, new_text3 = text1, text2, text3  # Keep current for now
+        return (
+            f"❌ Enrollment rejected: Text verification failed for {len(text_verification_failures)} sample(s).\n"
+            + "\n".join(failure_msgs),
+            new_text1,
+            new_text2,
+            new_text3,  # Display
+            new_text1,
+            new_text2,
+            new_text3,  # State
+        )
 
     # Enforce minimum length requirement - reject if any sample is too short
     if short_samples:
@@ -119,7 +155,7 @@ def enroll(username, audio1, audio2, audio3):
                     diagnostic_msgs.append(f"Sample {idx}:{diag_msg}")
 
         # Get new random texts for retry
-        text1, text2, text3 = get_enroll_texts()
+        new_text1, new_text2, new_text3 = get_enroll_texts()
 
         base_msg = (
             f"❌ Enrollment rejected: All samples must be at least {MIN_AUDIO_LENGTH_SEC:.0f} seconds long.\n\n"
@@ -130,13 +166,21 @@ def enroll(username, audio1, audio2, audio3):
         if diagnostic_msgs:
             base_msg += "\n" + "\n".join(diagnostic_msgs)
 
-        return (base_msg, text1, text2, text3)
+        return (
+            base_msg,
+            new_text1,
+            new_text2,
+            new_text3,
+            new_text1,
+            new_text2,
+            new_text3,
+        )
 
     # Store all embeddings separately (centroid will be computed on-the-fly during login)
     save_multiple_embeddings(username, embeddings, audio_lengths, audio_file_paths)
 
     # Get new random texts for next enrollment
-    text1, text2, text3 = get_enroll_texts()
+    new_text1, new_text2, new_text3 = get_enroll_texts()
 
     # Check for quality warnings (even if enrollment succeeded)
     quality_warnings = []
@@ -153,7 +197,7 @@ def enroll(username, audio1, audio2, audio3):
 
     # Add quality warnings if any
     if quality_warnings:
-        success_msg += "\n\n\n⚠️ Quality warnings detected in some samples:"
+        success_msg += "\n\n⚠️ Quality warnings detected in some samples:"
         for idx, diag in all_diagnostics:
             if idx in quality_warnings:
                 diag_msg = generate_diagnostic_message(diag, context="enrollment")
@@ -161,18 +205,36 @@ def enroll(username, audio1, audio2, audio3):
                     success_msg += f"\n\nSample {idx}:{diag_msg}"
         success_msg += "\n\n💡 Consider re-enrolling for better accuracy if login performance is poor."
 
-    return (success_msg, text1, text2, text3)
+    return (
+        success_msg,
+        new_text1,
+        new_text2,
+        new_text3,
+        new_text1,
+        new_text2,
+        new_text3,
+    )
 
 
 def create_enroll_tab():
     """Create the Enroll tab UI"""
     with gr.Tab("Enroll"):
         gr.Markdown("### 🎤 Voice Enrollment")
+        gr.Markdown(
+            "**Note:** All 3 samples are required. Each sample must be at least {:.0f} seconds long for optimal verification accuracy.".format(
+                MIN_AUDIO_LENGTH_SEC
+            )
+        )
 
         u = gr.Textbox(label="Username", placeholder="e.g: phatpham9")
 
         # Get initial random texts
         initial_text1, initial_text2, initial_text3 = get_enroll_texts()
+
+        # State variables to hold the current texts
+        text1_state = gr.State(value=initial_text1)
+        text2_state = gr.State(value=initial_text2)
+        text3_state = gr.State(value=initial_text3)
 
         gr.Markdown(
             f"#### Sample 1 (Required) - Minimum {MIN_AUDIO_LENGTH_SEC:.0f} seconds"
@@ -231,23 +293,43 @@ def create_enroll_tab():
 
         enroll_btn.click(
             enroll,
-            inputs=[u, a1, a2, a3],
-            outputs=[out, text1_display, text2_display, text3_display],
+            inputs=[u, a1, a2, a3, text1_state, text2_state, text3_state],
+            outputs=[
+                out,
+                text1_display,
+                text2_display,
+                text3_display,
+                text1_state,
+                text2_state,
+                text3_state,
+            ],
         )
 
         # Individual refresh buttons for each text
+        def refresh_text1():
+            text = get_enroll_texts()[0]
+            return text, text
+
+        def refresh_text2():
+            text = get_enroll_texts()[1]
+            return text, text
+
+        def refresh_text3():
+            text = get_enroll_texts()[2]
+            return text, text
+
         refresh_text1_btn.click(
-            lambda: get_enroll_texts()[0],
+            refresh_text1,
             inputs=[],
-            outputs=[text1_display],
+            outputs=[text1_display, text1_state],
         )
         refresh_text2_btn.click(
-            lambda: get_enroll_texts()[1],
+            refresh_text2,
             inputs=[],
-            outputs=[text2_display],
+            outputs=[text2_display, text2_state],
         )
         refresh_text3_btn.click(
-            lambda: get_enroll_texts()[2],
+            refresh_text3,
             inputs=[],
-            outputs=[text3_display],
+            outputs=[text3_display, text3_state],
         )
