@@ -4,11 +4,15 @@ FROM python:3.10-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for audio processing
+# Install system dependencies for audio processing and build tools
+# Note: gcc and python3-dev are required to build webrtcvad from source
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsndfile1 \
     git \
+    gcc \
+    g++ \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
