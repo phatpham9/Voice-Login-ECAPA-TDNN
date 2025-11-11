@@ -1,0 +1,25 @@
+name: Deploy to Hugging Face Spaces
+
+on:
+  push:
+    branches:
+      - main  # Change this to your default branch if different
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git remote add hf https://huggingface.co/spaces/phatpham9/Voice-Login-ECAPA-TDNN
+          git push https://phatpham9:$HF_TOKEN@huggingface.co/spaces/phatpham9/Voice-Login-ECAPA-TDNN main --force
