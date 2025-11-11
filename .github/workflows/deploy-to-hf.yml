@@ -15,6 +15,9 @@ jobs:
           fetch-depth: 0
           lfs: true
 
+      - name: Setup Git LFS
+        run: git lfs install
+          
       - name: Push to Hugging Face Spaces
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
