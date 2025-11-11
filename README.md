@@ -9,12 +9,14 @@ pinned: true
 license: mit
 short_description: A text-independent speaker verification system.
 thumbnail: >-
-  https://cdn-uploads.huggingface.co/production/uploads/677f2b5d19fb7f8c451e56e6/c5u7Lz_eGYRZeCDFem6v4.png
+  https://raw.githubusercontent.com/phatpham9/Voice-Login-ECAPA-TDNN/main/docs/screenshots/voice-login-ecapa-tdnn.png
 ---
 
 # 🔐 Voice Login with ECAPA-TDNN
 
 A text-independent speaker verification system built with ECAPA-TDNN (Emphasized Channel Attention, Propagation and Aggregation in Time Delay Neural Network) from SpeechBrain. This application provides a complete voice-based authentication solution with enrollment, verification, and comprehensive performance analytics.
+
+![Voice Login with ECAPA-TDNN](docs/screenshots/voice-login-ecapa-tdnn.png)
 
 ## 🎯 Overview
 
