@@ -17,7 +17,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.core import extract_embedding, load_audio_file
 from src.database import save_multiple_embeddings
 
-
 # Get the directory where this script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -27,6 +26,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ==========================================
 SEED_USERS = [
     "phat",
+    "robot",
     # Add more usernames here, e.g.:
     # "john",
     # "alice",
@@ -50,7 +50,7 @@ def enroll_user(username: str) -> bool:
     if not os.path.exists(sample_dir):
         print(f"❌ Directory not found: {sample_dir}")
         print(
-            f"   Please create the directory and add 3 audio samples (sample_1.wav, sample_2.wav, sample_3.wav)"
+            "   Please create the directory and add 3 audio samples (sample_1.wav, sample_2.wav, sample_3.wav)"
         )
         return False
 
@@ -66,9 +66,9 @@ def enroll_user(username: str) -> bool:
             print(f"❌ Sample not found: {sample_file}")
             return False
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Enrolling user: {username}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"✅ Found all 3 samples in {sample_dir}")
 
     # Extract embeddings
@@ -93,7 +93,7 @@ def enroll_user(username: str) -> bool:
             return False
 
     # Save to database
-    print(f"\n  Saving to database...")
+    print("\n  Saving to database...")
     try:
         save_multiple_embeddings(username, embeddings, audio_lengths, sample_files)
         print(
